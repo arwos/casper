@@ -25,3 +25,14 @@ go.work.sum
 # env file
 .env
 
+
+.tools/
+bin/
+build/
+.idea/
+.vscode/
+coverage.txt
+coverage.out
+*.db
+*.db-journal
+*.mmdb

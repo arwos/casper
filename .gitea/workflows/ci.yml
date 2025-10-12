@@ -1,0 +1,22 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    runs-on: golang
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Go
+        run: gvm local && go version
+
+      - name: Run CI
+        env:
+          COVERALLS_TOKEN: ${{ secrets.COVERALLS_TOKEN }}
+          CGO_ENABLED: 1
+        run: make ci
