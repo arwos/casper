@@ -5,8 +5,14 @@
 
 package main
 
-import "fmt"
+import (
+	"go.osspkg.com/console"
+
+	"go.arwos.org/casper/internal/client"
+)
 
 func main() {
-	fmt.Println("casper-cli")
+	cli := console.New("casper-cli", "Casper Certificate Management Client")
+	cli.AddCommand(client.CommandGenerateCA())
+	cli.Exec()
 }

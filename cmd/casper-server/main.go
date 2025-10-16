@@ -7,23 +7,25 @@ package main
 
 import (
 	"go.osspkg.com/goppy/v2"
-	"go.osspkg.com/goppy/v2/metrics"
 	"go.osspkg.com/goppy/v2/orm"
 	"go.osspkg.com/goppy/v2/orm/clients/pgsql"
 	"go.osspkg.com/goppy/v2/web"
+
+	"go.arwos.org/casper/internal"
 )
 
 var Version = "v0.0.0-dev"
 
 func main() {
-	app := goppy.New("casper-server", Version, "Certificate Management Server")
+	app := goppy.New("casper-server", Version, "Casper Certificate Management Server")
 
 	app.Plugins(
-		metrics.WithServer(),
 		web.WithServer(),
 		orm.WithORM(pgsql.Name),
 		orm.WithMigration(),
 	)
+
+	app.Plugins(internal.Plugins...)
 
 	app.Run()
 }
