@@ -14,16 +14,16 @@ import (
 )
 
 func (v *API) addCrtHandlers() {
-	for _, cert := range v.certStore.GetCerts() {
-		issuer := cert.Cert.Certificate.Issuer.String()
+	for _, cert := range v.certStore.List() {
+		issuer := cert.CA.Cert.Certificate.Issuer.String()
 
-		der, err := cert.Cert.EncodeDER()
+		der, err := cert.CA.Cert.EncodeDER()
 		if err != nil {
 			logx.Error("Failed to encode der certificate", "issuer", issuer, "err", err)
 			continue
 		}
 
-		for _, addr := range cert.Cert.Certificate.IssuingCertificateURL {
+		for _, addr := range cert.CA.Cert.Certificate.IssuingCertificateURL {
 			uri, err := url.ParseRequestURI(addr)
 			if err != nil {
 				logx.Error("Failed to parse issuing server URI", "issuer", issuer, "url", addr, "err", err)

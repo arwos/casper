@@ -15,26 +15,27 @@ import (
 	"go.osspkg.com/xc"
 )
 
-type item struct {
-	root *x509cert.Cert
-	ca   *x509cert.Cert
-	days int
+type Certificate struct {
+	Root *x509cert.Cert
+	CA   *x509cert.Cert
+	Days int
+	Icu  string
 	ttl  int64
 }
 
-func (i *item) Timestamp() int64 {
+func (i *Certificate) Timestamp() int64 {
 	return i.ttl
 }
 
 type Store struct {
-	cache cache.Cache[string, *item]
-	list  syncing.Slice[*item]
+	cache cache.Cache[string, *Certificate]
+	list  syncing.Slice[*Certificate]
 }
 
 func NewStore(ctx xc.Context, c *ConfigGroup) (*Store, error) {
 	obj := &Store{
-		cache: cache.New[string, *item](
-			cache.OptTimeClean[string, *item](ctx.Context(), 15*time.Minute),
+		cache: cache.New[string, *Certificate](
+			cache.OptTimeClean[string, *Certificate](ctx.Context(), 15*time.Minute),
 		),
 	}
 
@@ -57,11 +58,12 @@ func NewStore(ctx xc.Context, c *ConfigGroup) (*Store, error) {
 			return nil, fmt.Errorf("decode root cert %q: %w", conf.FileRootCert, err)
 		}
 
-		storeItem := &item{
-			root: rootCA,
-			ca:   ca,
-			days: conf.DefaultExpireDays,
+		storeItem := &Certificate{
+			Root: rootCA,
+			CA:   ca,
+			Days: conf.DefaultExpireDays,
 			ttl:  ca.Cert.Certificate.NotAfter.Unix(),
+			Icu:  conf.IssuingCertificateURL,
 		}
 
 		obj.list.Append(storeItem)
@@ -73,39 +75,19 @@ func NewStore(ctx xc.Context, c *ConfigGroup) (*Store, error) {
 	return obj, nil
 }
 
-func (s *Store) GetRoot(name string) (*x509cert.Cert, bool) {
+func (s *Store) Get(name string) (*Certificate, bool) {
 	v, ok := s.cache.Get(name)
 	if !ok {
 		return nil, false
 	}
-	return v.root, true
+	return v, true
 }
 
-func (s *Store) GetCA(name string) (*x509cert.Cert, bool) {
-	v, ok := s.cache.Get(name)
-	if !ok {
-		return nil, false
-	}
-	return v.ca, true
-}
-
-func (s *Store) GetDays(name string) (int, bool) {
-	v, ok := s.cache.Get(name)
-	if !ok {
-		return 0, false
-	}
-	return v.days, true
-}
-
-func (s *Store) GetDomains() []string {
-	return s.cache.Keys()
-}
-
-func (s *Store) GetCerts() []*x509cert.Cert {
-	result := make([]*x509cert.Cert, 0, s.list.Size())
+func (s *Store) List() []*Certificate {
+	result := make([]*Certificate, 0, s.list.Size())
 
 	for cert := range s.list.Yield() {
-		result = append(result, cert.ca)
+		result = append(result, cert)
 	}
 
 	return result

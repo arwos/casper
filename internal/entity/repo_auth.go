@@ -5,13 +5,12 @@ import (
 	"context"
 	time "time"
 
-	uuid "github.com/google/uuid"
 	"go.osspkg.com/goppy/v2/orm"
 )
 
-const sqlCreateAuth = `INSERT INTO "auth" ("token", "domains", "locked", "created_at", "updated_at") VALUES ($1, $2, $3, $4, $5);`
+const sqlCreateAuth = `INSERT INTO "auth" ("token", "enc_key", "domains", "locked", "created_at", "updated_at") VALUES ($1, $2, $3, $4, $5, $6)`
 
-func (v *Repo) CreateBulkAuth(ctx context.Context, ms []Auth, opts ...CreateOption) error {
+func (v *Repo) CreateBulkAuth(ctx context.Context, ms []*Auth, opts ...CreateOption) error {
 	if len(ms) == 0 {
 		return nil
 	}
@@ -24,11 +23,12 @@ func (v *Repo) CreateBulkAuth(ctx context.Context, ms []Auth, opts ...CreateOpti
 	for _, o := range opts {
 		o(buf)
 	}
-	buf.WriteString(` RETURNING ("id");`)
+	buf.WriteString(` RETURNING ("id")`)
+	buf.WriteString(";")
 	return v.Master().Tx(ctx, "auth_create_bulk", func(tx orm.Tx) {
 		for _, m := range ms {
 			tx.Query(func(q orm.Querier) {
-				q.SQL(buf.String(), m.Token, m.Domains, m.Locked, m.CreatedAt, m.UpdatedAt)
+				q.SQL(buf.String(), m.Token, m.EncryptKey, m.Domains, m.Locked, m.CreatedAt, m.UpdatedAt)
 				q.Bind(func(bind orm.Scanner) error {
 					return bind.Scan(&m.ID)
 				})
@@ -36,7 +36,7 @@ func (v *Repo) CreateBulkAuth(ctx context.Context, ms []Auth, opts ...CreateOpti
 		}
 	})
 }
-func (v *Repo) CreateAuth(ctx context.Context, m Auth, opts ...CreateOption) error {
+func (v *Repo) CreateAuth(ctx context.Context, m *Auth, opts ...CreateOption) error {
 	m.CreatedAt = time.Now()
 	buf := _sqlBuilderPool.Get()
 	defer func() { _sqlBuilderPool.Put(buf) }()
@@ -44,16 +44,17 @@ func (v *Repo) CreateAuth(ctx context.Context, m Auth, opts ...CreateOption) err
 	for _, o := range opts {
 		o(buf)
 	}
-	buf.WriteString(` RETURNING ("id");`)
+	buf.WriteString(` RETURNING ("id")`)
+	buf.WriteString(";")
 	return v.Master().Query(ctx, "auth_create", func(q orm.Querier) {
-		q.SQL(buf.String(), m.Token, m.Domains, m.Locked, m.CreatedAt, m.UpdatedAt)
+		q.SQL(buf.String(), m.Token, m.EncryptKey, m.Domains, m.Locked, m.CreatedAt, m.UpdatedAt)
 		q.Bind(func(bind orm.Scanner) error {
 			return bind.Scan(&m.ID)
 		})
 	})
 }
 
-const sqlSelectCursorAuth = `SELECT "id", "token", "domains", "locked", "created_at", "updated_at" FROM "auth" WHERE "id">$1 ORDER BY "id" LIMIT $2;`
+const sqlSelectCursorAuth = `SELECT "id", "token", "enc_key", "domains", "locked", "created_at", "updated_at" FROM "auth" WHERE "id">$1 ORDER BY "id" LIMIT $2;`
 
 func (v *Repo) SelectAuthCursor(ctx context.Context, from int64, lim uint) ([]Auth, error) {
 	result := make([]Auth, 0, lim)
@@ -61,7 +62,7 @@ func (v *Repo) SelectAuthCursor(ctx context.Context, from int64, lim uint) ([]Au
 		q.SQL(sqlSelectCursorAuth, from, lim)
 		q.Bind(func(bind orm.Scanner) error {
 			m := Auth{}
-			if e := bind.Scan(&m.ID, &m.Token, &m.Domains, &m.Locked, &m.CreatedAt, &m.UpdatedAt); e != nil {
+			if e := bind.Scan(&m.ID, &m.Token, &m.EncryptKey, &m.Domains, &m.Locked, &m.CreatedAt, &m.UpdatedAt); e != nil {
 				return e
 			}
 			result = append(result, m)
@@ -74,7 +75,7 @@ func (v *Repo) SelectAuthCursor(ctx context.Context, from int64, lim uint) ([]Au
 	return result, nil
 }
 
-const sqlSelectAuthByID = `SELECT "id", "token", "domains", "locked", "created_at", "updated_at" FROM "auth" WHERE "id"=ANY($1);`
+const sqlSelectAuthByID = `SELECT "id", "token", "enc_key", "domains", "locked", "created_at", "updated_at" FROM "auth" WHERE "id"=ANY($1);`
 
 func (v *Repo) SelectAuthByID(ctx context.Context, args ...int64) ([]Auth, error) {
 	if len(args) == 0 {
@@ -85,7 +86,7 @@ func (v *Repo) SelectAuthByID(ctx context.Context, args ...int64) ([]Auth, error
 		q.SQL(sqlSelectAuthByID, args)
 		q.Bind(func(bind orm.Scanner) error {
 			m := Auth{}
-			if e := bind.Scan(&m.ID, &m.Token, &m.Domains, &m.Locked, &m.CreatedAt, &m.UpdatedAt); e != nil {
+			if e := bind.Scan(&m.ID, &m.Token, &m.EncryptKey, &m.Domains, &m.Locked, &m.CreatedAt, &m.UpdatedAt); e != nil {
 				return e
 			}
 			result = append(result, m)
@@ -98,9 +99,9 @@ func (v *Repo) SelectAuthByID(ctx context.Context, args ...int64) ([]Auth, error
 	return result, nil
 }
 
-const sqlSelectAuthByToken = `SELECT "id", "token", "domains", "locked", "created_at", "updated_at" FROM "auth" WHERE "token"=ANY($1);`
+const sqlSelectAuthByToken = `SELECT "id", "token", "enc_key", "domains", "locked", "created_at", "updated_at" FROM "auth" WHERE "token"=ANY($1);`
 
-func (v *Repo) SelectAuthByToken(ctx context.Context, args ...uuid.UUID) ([]Auth, error) {
+func (v *Repo) SelectAuthByToken(ctx context.Context, args ...string) ([]Auth, error) {
 	if len(args) == 0 {
 		return nil, nil
 	}
@@ -109,7 +110,7 @@ func (v *Repo) SelectAuthByToken(ctx context.Context, args ...uuid.UUID) ([]Auth
 		q.SQL(sqlSelectAuthByToken, args)
 		q.Bind(func(bind orm.Scanner) error {
 			m := Auth{}
-			if e := bind.Scan(&m.ID, &m.Token, &m.Domains, &m.Locked, &m.CreatedAt, &m.UpdatedAt); e != nil {
+			if e := bind.Scan(&m.ID, &m.Token, &m.EncryptKey, &m.Domains, &m.Locked, &m.CreatedAt, &m.UpdatedAt); e != nil {
 				return e
 			}
 			result = append(result, m)
@@ -122,7 +123,31 @@ func (v *Repo) SelectAuthByToken(ctx context.Context, args ...uuid.UUID) ([]Auth
 	return result, nil
 }
 
-const sqlSelectAuthByDomains = `SELECT "id", "token", "domains", "locked", "created_at", "updated_at" FROM "auth" WHERE "domains"=ANY($1);`
+const sqlSelectAuthByEncryptKey = `SELECT "id", "token", "enc_key", "domains", "locked", "created_at", "updated_at" FROM "auth" WHERE "enc_key"=ANY($1);`
+
+func (v *Repo) SelectAuthByEncryptKey(ctx context.Context, args ...string) ([]Auth, error) {
+	if len(args) == 0 {
+		return nil, nil
+	}
+	result := make([]Auth, 0, len(args))
+	err := v.Sync().Query(ctx, "auth_read_by_enc_key", func(q orm.Querier) {
+		q.SQL(sqlSelectAuthByEncryptKey, args)
+		q.Bind(func(bind orm.Scanner) error {
+			m := Auth{}
+			if e := bind.Scan(&m.ID, &m.Token, &m.EncryptKey, &m.Domains, &m.Locked, &m.CreatedAt, &m.UpdatedAt); e != nil {
+				return e
+			}
+			result = append(result, m)
+			return nil
+		})
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+const sqlSelectAuthByDomains = `SELECT "id", "token", "enc_key", "domains", "locked", "created_at", "updated_at" FROM "auth" WHERE "domains"=ANY($1);`
 
 func (v *Repo) SelectAuthByDomains(ctx context.Context, args ...string) ([]Auth, error) {
 	if len(args) == 0 {
@@ -133,7 +158,7 @@ func (v *Repo) SelectAuthByDomains(ctx context.Context, args ...string) ([]Auth,
 		q.SQL(sqlSelectAuthByDomains, args)
 		q.Bind(func(bind orm.Scanner) error {
 			m := Auth{}
-			if e := bind.Scan(&m.ID, &m.Token, &m.Domains, &m.Locked, &m.CreatedAt, &m.UpdatedAt); e != nil {
+			if e := bind.Scan(&m.ID, &m.Token, &m.EncryptKey, &m.Domains, &m.Locked, &m.CreatedAt, &m.UpdatedAt); e != nil {
 				return e
 			}
 			result = append(result, m)
@@ -146,7 +171,7 @@ func (v *Repo) SelectAuthByDomains(ctx context.Context, args ...string) ([]Auth,
 	return result, nil
 }
 
-const sqlSelectAuthByLocked = `SELECT "id", "token", "domains", "locked", "created_at", "updated_at" FROM "auth" WHERE "locked"=ANY($1);`
+const sqlSelectAuthByLocked = `SELECT "id", "token", "enc_key", "domains", "locked", "created_at", "updated_at" FROM "auth" WHERE "locked"=ANY($1);`
 
 func (v *Repo) SelectAuthByLocked(ctx context.Context, args ...bool) ([]Auth, error) {
 	if len(args) == 0 {
@@ -157,7 +182,7 @@ func (v *Repo) SelectAuthByLocked(ctx context.Context, args ...bool) ([]Auth, er
 		q.SQL(sqlSelectAuthByLocked, args)
 		q.Bind(func(bind orm.Scanner) error {
 			m := Auth{}
-			if e := bind.Scan(&m.ID, &m.Token, &m.Domains, &m.Locked, &m.CreatedAt, &m.UpdatedAt); e != nil {
+			if e := bind.Scan(&m.ID, &m.Token, &m.EncryptKey, &m.Domains, &m.Locked, &m.CreatedAt, &m.UpdatedAt); e != nil {
 				return e
 			}
 			result = append(result, m)
@@ -170,7 +195,7 @@ func (v *Repo) SelectAuthByLocked(ctx context.Context, args ...bool) ([]Auth, er
 	return result, nil
 }
 
-const sqlSelectAuthByCreatedAt = `SELECT "id", "token", "domains", "locked", "created_at", "updated_at" FROM "auth" WHERE "created_at"=ANY($1);`
+const sqlSelectAuthByCreatedAt = `SELECT "id", "token", "enc_key", "domains", "locked", "created_at", "updated_at" FROM "auth" WHERE "created_at"=ANY($1);`
 
 func (v *Repo) SelectAuthByCreatedAt(ctx context.Context, args ...time.Time) ([]Auth, error) {
 	if len(args) == 0 {
@@ -181,7 +206,7 @@ func (v *Repo) SelectAuthByCreatedAt(ctx context.Context, args ...time.Time) ([]
 		q.SQL(sqlSelectAuthByCreatedAt, args)
 		q.Bind(func(bind orm.Scanner) error {
 			m := Auth{}
-			if e := bind.Scan(&m.ID, &m.Token, &m.Domains, &m.Locked, &m.CreatedAt, &m.UpdatedAt); e != nil {
+			if e := bind.Scan(&m.ID, &m.Token, &m.EncryptKey, &m.Domains, &m.Locked, &m.CreatedAt, &m.UpdatedAt); e != nil {
 				return e
 			}
 			result = append(result, m)
@@ -194,7 +219,7 @@ func (v *Repo) SelectAuthByCreatedAt(ctx context.Context, args ...time.Time) ([]
 	return result, nil
 }
 
-const sqlSelectAuthByUpdatedAt = `SELECT "id", "token", "domains", "locked", "created_at", "updated_at" FROM "auth" WHERE "updated_at"=ANY($1);`
+const sqlSelectAuthByUpdatedAt = `SELECT "id", "token", "enc_key", "domains", "locked", "created_at", "updated_at" FROM "auth" WHERE "updated_at"=ANY($1);`
 
 func (v *Repo) SelectAuthByUpdatedAt(ctx context.Context, args ...time.Time) ([]Auth, error) {
 	if len(args) == 0 {
@@ -205,7 +230,7 @@ func (v *Repo) SelectAuthByUpdatedAt(ctx context.Context, args ...time.Time) ([]
 		q.SQL(sqlSelectAuthByUpdatedAt, args)
 		q.Bind(func(bind orm.Scanner) error {
 			m := Auth{}
-			if e := bind.Scan(&m.ID, &m.Token, &m.Domains, &m.Locked, &m.CreatedAt, &m.UpdatedAt); e != nil {
+			if e := bind.Scan(&m.ID, &m.Token, &m.EncryptKey, &m.Domains, &m.Locked, &m.CreatedAt, &m.UpdatedAt); e != nil {
 				return e
 			}
 			result = append(result, m)
@@ -218,9 +243,9 @@ func (v *Repo) SelectAuthByUpdatedAt(ctx context.Context, args ...time.Time) ([]
 	return result, nil
 }
 
-const sqlUpdateAuthByID = `UPDATE "auth" SET "created_at"=$4, "domains"=$2, "locked"=$3, "token"=$1, "updated_at"=$5 WHERE "id"=$6;`
+const sqlUpdateAuthByID = `UPDATE "auth" SET "created_at"=$5, "domains"=$3, "enc_key"=$2, "locked"=$4, "token"=$1, "updated_at"=$6 WHERE "id"=$7;`
 
-func (v *Repo) UpdateAuthByID(ctx context.Context, ms ...Auth) error {
+func (v *Repo) UpdateAuthByID(ctx context.Context, ms ...*Auth) error {
 	if len(ms) == 0 {
 		return nil
 	}
@@ -229,14 +254,14 @@ func (v *Repo) UpdateAuthByID(ctx context.Context, ms ...Auth) error {
 	}
 	if len(ms) == 1 {
 		return v.Master().Exec(ctx, "auth_update_by_id", func(e orm.Executor) {
-			e.SQL(sqlUpdateAuthByID, ms[0].Token, ms[0].Domains, ms[0].Locked, ms[0].CreatedAt, ms[0].UpdatedAt, ms[0].ID)
+			e.SQL(sqlUpdateAuthByID, ms[0].Token, ms[0].EncryptKey, ms[0].Domains, ms[0].Locked, ms[0].CreatedAt, ms[0].UpdatedAt, ms[0].ID)
 		})
 	}
 	return v.Master().Tx(ctx, "auth_update_bulk_by_id", func(tx orm.Tx) {
 		tx.Exec(func(e orm.Executor) {
 			e.SQL(sqlUpdateAuthByID)
 			for _, m := range ms {
-				e.Params(m.Token, m.Domains, m.Locked, m.CreatedAt, m.UpdatedAt, m.ID)
+				e.Params(m.Token, m.EncryptKey, m.Domains, m.Locked, m.CreatedAt, m.UpdatedAt, m.ID)
 			}
 		})
 	})
@@ -257,13 +282,26 @@ func (v *Repo) DeleteAuthByID(ctx context.Context, ms ...int64) error {
 
 const sqlDeleteAuthByToken = `DELETE FROM "auth" WHERE "token"=ANY($1);`
 
-func (v *Repo) DeleteAuthByToken(ctx context.Context, ms ...uuid.UUID) error {
+func (v *Repo) DeleteAuthByToken(ctx context.Context, ms ...string) error {
 	if len(ms) == 0 {
 		return nil
 	}
 	return v.Master().Tx(ctx, "auth_delete_by_token", func(tx orm.Tx) {
 		tx.Exec(func(e orm.Executor) {
 			e.SQL(sqlDeleteAuthByToken, ms)
+		})
+	})
+}
+
+const sqlDeleteAuthByEncryptKey = `DELETE FROM "auth" WHERE "enc_key"=ANY($1);`
+
+func (v *Repo) DeleteAuthByEncryptKey(ctx context.Context, ms ...string) error {
+	if len(ms) == 0 {
+		return nil
+	}
+	return v.Master().Tx(ctx, "auth_delete_by_enc_key", func(tx orm.Tx) {
+		tx.Exec(func(e orm.Executor) {
+			e.SQL(sqlDeleteAuthByEncryptKey, ms)
 		})
 	})
 }

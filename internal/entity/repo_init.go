@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"go.osspkg.com/goppy/v2/orm"
+	orm "go.osspkg.com/goppy/v2/orm"
 	"go.osspkg.com/ioutils/pool"
 )
 

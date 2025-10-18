@@ -6,6 +6,8 @@ CREATE TABLE IF NOT EXISTS "certs"
 (
 	"id" BIGINT DEFAULT nextval('certs__id__seq') NOT NULL,
 	CONSTRAINT "certs__id__pk" PRIMARY KEY ( "id" ),
+	"owner" BIGINT NOT NULL,
+	CONSTRAINT "certs__owner__fk" FOREIGN KEY ( "owner" ) REFERENCES "auth" ( "id" ) ON DELETE CASCADE NOT DEFERRABLE,
 	"domain" VARCHAR( 254 ) NOT NULL,
 	"subject" TEXT NOT NULL,
 	"fingerprint" TEXT NOT NULL,

@@ -52,6 +52,8 @@ func (v *API) Up(ctx context.Context) error {
 	v.addCrtHandlers()
 	v.addCrlHandlers()
 	v.updateCrlTicker(ctx)
+	v.autoCleanCrlTicker(ctx)
+	v.addApiHandlers()
 
 	return nil
 }

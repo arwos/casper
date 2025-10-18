@@ -30,17 +30,17 @@ const (
 var crlCache = syncing.NewMap[string, []byte](10)
 
 func (v *API) addCrlHandlers() {
-	for _, cert := range v.certStore.GetCerts() {
-		issuer := cert.Cert.Certificate.Issuer.String()
+	for _, cert := range v.certStore.List() {
+		issuer := cert.CA.Cert.Certificate.Issuer.String()
 
-		for _, addr := range cert.Cert.Certificate.CRLDistributionPoints {
+		for _, addr := range cert.CA.Cert.Certificate.CRLDistributionPoints {
 			uri, err := url.ParseRequestURI(addr)
 			if err != nil {
 				logx.Error("Failed to parse crl server URI", "issuer", issuer, "url", addr, "err", err)
 				continue
 			}
 
-			keyHashB, err := cert.Cert.IssuerKeyHash(entity.Hash)
+			keyHashB, err := cert.CA.Cert.IssuerKeyHash(entity.Hash)
 			if err != nil {
 				logx.Error("Failed to get issuer key hash", "issuer", issuer, "err", err)
 				continue
@@ -72,6 +72,22 @@ func (v *API) addCrlHandlers() {
 	}
 }
 
+func (v *API) autoCleanCrlTicker(ctx context.Context) {
+	tik := routine.Ticker{
+		Interval: 6 * time.Hour,
+		OnStart:  true,
+		Calls: []routine.TickFunc{
+			func(ctx context.Context, t time.Time) {
+				if err := v.entityRepo.DeleteCertExpiredByValidUntil(ctx); err != nil {
+					logx.Error("Failed to delete expired certs", "err", err)
+				}
+			},
+		},
+	}
+
+	go tik.Run(ctx)
+}
+
 func (v *API) updateCrlTicker(ctx context.Context) {
 	tik := routine.Ticker{
 		Interval: updateCrlIntervalSec * time.Second,
@@ -81,13 +97,13 @@ func (v *API) updateCrlTicker(ctx context.Context) {
 
 				number := time.Now().UTC().Unix()
 
-				for _, cert := range v.certStore.GetCerts() {
+				for _, cert := range v.certStore.List() {
 					number++
 
-					issuer := cert.Cert.Certificate.Issuer.String()
+					issuer := cert.CA.Cert.Certificate.Issuer.String()
 					logx.Info("Updating CRL", "status", "start", "issuer", issuer)
 
-					keyHashB, err := cert.Cert.IssuerKeyHash(entity.Hash)
+					keyHashB, err := cert.CA.Cert.IssuerKeyHash(entity.Hash)
 					if err != nil {
 						logx.Error("Failed to get issuer key hash", "issuer", issuer, "err", err)
 						continue
@@ -103,7 +119,7 @@ func (v *API) updateCrlTicker(ctx context.Context) {
 						)
 						q.Bind(func(bind orm.Scanner) error {
 							model := x509cert.RevocationEntity{}
-							if e := bind.Scan(&model.SerialNumber, &model.SerialNumber); e != nil {
+							if e := bind.Scan(&model.SerialNumber, &model.RevocationTime); e != nil {
 								return e
 							}
 							result = append(result, model)
@@ -116,7 +132,7 @@ func (v *API) updateCrlTicker(ctx context.Context) {
 					}
 
 					nextUpdate := updateCrlIntervalSec*time.Second + 10*time.Minute
-					b, err := x509cert.NewCRL(*cert, number, nextUpdate, result)
+					b, err := x509cert.NewCRL(*cert.CA, number, nextUpdate, result)
 					if err != nil {
 						logx.Error("Failed to build crl", "issuer", issuer, "err", err)
 						continue

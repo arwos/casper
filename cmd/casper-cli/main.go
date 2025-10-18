@@ -8,11 +8,12 @@ package main
 import (
 	"go.osspkg.com/console"
 
-	"go.arwos.org/casper/internal/client"
+	"go.arwos.org/casper/internal/cmds"
 )
 
 func main() {
 	cli := console.New("casper-cli", "Casper Certificate Management Client")
-	cli.AddCommand(client.CommandGenerateCA())
+	cli.AddCommand(cmds.GenerateCA())
+	cli.AddCommand(cmds.RenewalCert())
 	cli.Exec()
 }

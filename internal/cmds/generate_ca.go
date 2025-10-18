@@ -3,7 +3,7 @@
  *  Use of this source code is governed by a GPL-3.0 license that can be found in the LICENSE file.
  */
 
-package client
+package cmds
 
 import (
 	"crypto/x509"
@@ -17,13 +17,13 @@ import (
 	"go.osspkg.com/ioutils/fs"
 )
 
-var algs = map[string]x509.SignatureAlgorithm{
+var _algorithms = map[string]x509.SignatureAlgorithm{
 	"rsa256": x509.SHA256WithRSA,
 	"rsa384": x509.SHA384WithRSA,
 	"rsa512": x509.SHA512WithRSA,
 }
 
-func CommandGenerateCA() console.CommandGetter {
+func GenerateCA() console.CommandGetter {
 	return console.NewCommand(func(setter console.CommandSetter) {
 		setter.Setup("ca", "generate Root CA")
 		setter.Flag(func(f console.FlagsSetter) {
@@ -44,9 +44,9 @@ func CommandGenerateCA() console.CommandGetter {
 			_cn, _org, _country, _ocsp, _icu, _crl, _alg string, _bits, _deadline int64, _output string,
 			_caCertPath, _caKeyPath string,
 		) {
-			alg, ok := algs[_alg]
+			alg, ok := _algorithms[_alg]
 			if !ok {
-				console.Fatalf("unknown algorithm: %s, can use %s", _alg, strings.Join(do.Keys(algs), ", "))
+				console.Fatalf("unknown algorithm: %s, can use %s", _alg, strings.Join(do.Keys(_algorithms), ", "))
 			}
 
 			validityPeriod := time.Duration(_deadline) * time.Hour * 24

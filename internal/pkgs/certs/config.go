@@ -10,11 +10,12 @@ type ConfigGroup struct {
 }
 
 type Config struct {
-	FileRootCert      string   `yaml:"root_cert"`
-	FileCACert        string   `yaml:"ca_cert"`
-	FileCAKey         string   `yaml:"ca_key"`
-	Domains           []string `yaml:"domains"`
-	DefaultExpireDays int      `yaml:"default_expire_days"`
+	FileRootCert          string   `yaml:"root_cert"`
+	FileCACert            string   `yaml:"ca_cert"`
+	FileCAKey             string   `yaml:"ca_key"`
+	Domains               []string `yaml:"domains"`
+	DefaultExpireDays     int      `yaml:"default_expire_days"`
+	IssuingCertificateURL string   `yaml:"issuing_certificate_url"`
 }
 
 func (c *ConfigGroup) Default() {

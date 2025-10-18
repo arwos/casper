@@ -6,7 +6,8 @@ CREATE TABLE IF NOT EXISTS "auth"
 (
 	"id" BIGINT DEFAULT nextval('auth__id__seq') NOT NULL,
 	CONSTRAINT "auth__id__pk" PRIMARY KEY ( "id" ),
-	"token" UUID NOT NULL,
+	"token" VARCHAR( 128 ) NOT NULL,
+	"enc_key" VARCHAR( 45 ) NOT NULL,
 	"domains" TEXT[] NOT NULL,
 	"locked" BOOLEAN NOT NULL,
 	"created_at" TIMESTAMPTZ NOT NULL,
