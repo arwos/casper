@@ -13,8 +13,7 @@ import (
 	"net/url"
 	"time"
 
-	"go.osspkg.com/encrypt/x509cert"
-	"go.osspkg.com/goppy/v2/orm"
+	"go.osspkg.com/encrypt/pki"
 	"go.osspkg.com/goppy/v2/web"
 	"go.osspkg.com/logx"
 	"go.osspkg.com/routine"
@@ -31,16 +30,16 @@ var crlCache = syncing.NewMap[string, []byte](10)
 
 func (v *API) addCrlHandlers() {
 	for _, cert := range v.certStore.List() {
-		issuer := cert.CA.Cert.Certificate.Issuer.String()
+		issuer := cert.CA.Crt.Issuer.String()
 
-		for _, addr := range cert.CA.Cert.Certificate.CRLDistributionPoints {
+		for _, addr := range cert.CA.Crt.CRLDistributionPoints {
 			uri, err := url.ParseRequestURI(addr)
 			if err != nil {
 				logx.Error("Failed to parse crl server URI", "issuer", issuer, "url", addr, "err", err)
 				continue
 			}
 
-			keyHashB, err := cert.CA.Cert.IssuerKeyHash(entity.Hash)
+			keyHashB, err := cert.CA.IssuerKeyHash(entity.Hash)
 			if err != nil {
 				logx.Error("Failed to get issuer key hash", "issuer", issuer, "err", err)
 				continue
@@ -48,7 +47,7 @@ func (v *API) addCrlHandlers() {
 
 			logx.Info("Adding crl server URL", "issuer", issuer, "uri", uri.Path)
 
-			v.crlRoute.Get(uri.Path, func() func(ctx web.Ctx) {
+			v.pkiRoute.Get(uri.Path, func() func(ctx web.Ctx) {
 				keyHash := hex.EncodeToString(keyHashB)
 				cc := fmt.Sprintf("max-age=%d,s-maxage=14400,public,no-transform,must-revalidate", updateCrlIntervalSec)
 
@@ -100,45 +99,31 @@ func (v *API) updateCrlTicker(ctx context.Context) {
 				for _, cert := range v.certStore.List() {
 					number++
 
-					issuer := cert.CA.Cert.Certificate.Issuer.String()
+					issuer := cert.CA.Crt.Issuer.String()
 					logx.Info("Updating CRL", "status", "start", "issuer", issuer)
 
-					keyHashB, err := cert.CA.Cert.IssuerKeyHash(entity.Hash)
+					keyHashB, err := cert.CA.IssuerKeyHash(entity.Hash)
 					if err != nil {
 						logx.Error("Failed to get issuer key hash", "issuer", issuer, "err", err)
 						continue
 					}
 
 					keyHash := hex.EncodeToString(keyHashB)
-					result := make([]x509cert.RevocationEntity, 0, 10)
 
-					err = v.entityRepo.Sync().Query(ctx, "certs_select_revoked", func(q orm.Querier) {
-						q.SQL(
-							`SELECT "id", "updated_at" FROM "certs" WHERE "issuer_key_hash" = $1 AND "revoked" = true;`,
-							keyHash,
-						)
-						q.Bind(func(bind orm.Scanner) error {
-							model := x509cert.RevocationEntity{}
-							if e := bind.Scan(&model.SerialNumber, &model.RevocationTime); e != nil {
-								return e
-							}
-							result = append(result, model)
-							return nil
-						})
-					})
+					result, err := v.entityRepo.SelectCertRevoked(ctx, keyHash)
 					if err != nil {
 						logx.Error("Failed to get revoked certs", "issuer", issuer, "err", err)
 						continue
 					}
 
 					nextUpdate := updateCrlIntervalSec*time.Second + 10*time.Minute
-					b, err := x509cert.NewCRL(*cert.CA, number, nextUpdate, result)
+					b, err := pki.NewCRL(*cert.CA, number, nextUpdate, result)
 					if err != nil {
 						logx.Error("Failed to build crl", "issuer", issuer, "err", err)
 						continue
 					}
 
-					crlCache.Set(keyHash, b.EncodeDER())
+					crlCache.Set(keyHash, b)
 
 					logx.Info("Updating CRL", "status", "done", "issuer", issuer)
 				}

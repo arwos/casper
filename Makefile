@@ -3,7 +3,7 @@ SHELL=/bin/bash
 
 .PHONY: install
 install:
-	go install go.osspkg.com/goppy/v2/cmd/goppy@v2.4.5-0.20251018025447-a7cb8181eb99
+	go install go.osspkg.com/goppy/v2/cmd/goppy@v2.4.5
 	goppy setup-lib
 
 .PHONY: lint
@@ -32,7 +32,14 @@ run_client_ca:
 	go run -race cmd/casper-cli/main.go ca \
 		--cn='Dev Root CA L0' \
 		--org='Dev Team' \
+		--country='RU' \
 		--deadline=7300 \
+		--alg=ecdsa512 \
+		--ocsp='http://pki.demo.local/root/root-l0' \
+		--cps='http://pki.demo.local/docs/cps.pdf' \
+		--crl='http://pki.demo.local/crl/root-l0.crl' \
+		--icu='http://pki.demo.local/icu/root-l0.crt' \
+		--email='pki@demo.local' \
 		--output=./build
 
 	go run -race cmd/casper-cli/main.go ca \
@@ -41,20 +48,31 @@ run_client_ca:
 		--deadline=3650 \
 		--ca-cert=./build/dev_root_ca_l0.crt \
 		--ca-key=./build/dev_root_ca_l0.key \
-		--ocsp='http://ocsp.demo.local/root-l1' \
-		--crl='http://crl.demo.local/root-l1.crl' \
-		--icu='http://crt.demo.local/root-l0.crt' \
+		--alg=ecdsa512 \
+		--ocsp='http://pki.demo.local/root/root-l1' \
+		--cps='http://pki.demo.local/docs/cps.pdf' \
+		--crl='http://pki.demo.local/crl/root-l1.crl' \
+		--icu='http://pki.demo.local/icu/root-l0.crt' \
+		--email='pki@demo.local' \
 		--output=./build
 
 run_client_renewal:
 	go run -race cmd/casper-cli/main.go renewal \
 		--address='http://127.0.0.1:20001' \
-		--auth-id='1' \
+		--auth-id='c958e408-d558-4964-aac1-960f815c0c2e' \
 		--auth-key='Ae8fL1pAB+83qaob3cQkX/bGHxDycUjW' \
-		--domain='a.demo.com' \
-		--decrypt-key='rckSUuqSFhuxe5LZXuu+BgOpL+yqgyVnc9KbSR6QQlI=' \
+		--domains='a.demo.com' \
+		--alg=ecdsa256 \
 		--force \
 		--output=./build
+
+run_client_ocsp:
+	openssl x509 -noout -ocsp_uri -in ./build/a_demo_com.crt
+	openssl ocsp \
+		-issuer ./build/a_demo_com.chain.crt \
+		-cert ./build/a_demo_com.crt \
+		-text -url http://127.0.0.1:20002/root/root-l1
+
 
 run_server:
 	go run -race cmd/casper-server/main.go --config=config/config.dev.yaml

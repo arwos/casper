@@ -13,29 +13,31 @@ import (
 	"net/url"
 	"time"
 
-	"go.osspkg.com/encrypt/x509cert"
+	"go.osspkg.com/encrypt/pki"
 	"go.osspkg.com/goppy/v2/web"
 	"go.osspkg.com/logx"
-	"golang.org/x/crypto/ocsp"
 
 	"go.arwos.org/casper/internal/entity"
 )
 
 func (v *API) addOCSPHandlers() {
 	for _, cert := range v.certStore.List() {
-		issuer := cert.CA.Cert.Certificate.Issuer.String()
+		issuer := cert.CA.Crt.Issuer.String()
 
-		srv := &x509cert.OCSPServer{
+		srv := &pki.OCSPServer{
 			CA: *cert.CA,
 			Resolver: &ocspStatusResolve{
 				repo:   v.entityRepo,
-				cert:   cert.CA,
+				cert:   *cert.CA,
 				issuer: issuer,
 			},
-			UpdateInterval: 60 * time.Minute,
+			UpdateInterval: 59 * time.Minute,
+			OnError: func(err error) {
+				logx.Error("Failed OCSP server request", "issuer", issuer, "err", err)
+			},
 		}
 
-		for _, addr := range cert.CA.Cert.Certificate.OCSPServer {
+		for _, addr := range cert.CA.Crt.OCSPServer {
 			uri, err := url.ParseRequestURI(addr)
 			if err != nil {
 				logx.Error("Failed to parse OCSP server URI", "issuer", issuer, "url", addr, "err", err)
@@ -44,7 +46,7 @@ func (v *API) addOCSPHandlers() {
 
 			logx.Info("Adding OCSP server URL", "issuer", issuer, "url", uri.Path)
 
-			v.ocspRoute.Post(uri.Path, func(ctx web.Ctx) {
+			v.pkiRoute.Post(uri.Path, func(ctx web.Ctx) {
 				srv.HTTPHandler(ctx.Response(), ctx.Request())
 			})
 		}
@@ -53,57 +55,58 @@ func (v *API) addOCSPHandlers() {
 
 type ocspStatusResolve struct {
 	repo   *entity.Repo
-	cert   *x509cert.Cert
+	cert   pki.Certificate
 	issuer string
 }
 
-func (v *ocspStatusResolve) OCSPStatusResolve(ctx context.Context, r *ocsp.Request) (x509cert.OCSPStatus, error) {
+func (v *ocspStatusResolve) OCSPStatusResolve(ctx context.Context, r *pki.OCSPRequest) (*pki.OCSPResponse, error) {
 	id := r.SerialNumber.Int64()
+
 	data, err := v.repo.SelectCertBySerialNumber(ctx, id)
 	if err != nil {
-		logx.Error("Failed to select OCSP status", "id", id, "err", err)
-		return ocsp.ServerFailed, fmt.Errorf("internal error")
+		return nil, fmt.Errorf("failed to fetch status (%d): %w", id, err)
 	}
 
 	if len(data) == 0 {
-		return x509cert.OCSPStatusUnknown, nil
+		return &pki.OCSPResponse{Status: pki.OCSPStatusUnknown}, nil
 	}
 
 	{
-		caVal, caErr := v.cert.Cert.IssuerKeyHash(entity.Hash)
-		reqVal, reqErr := v.cert.Cert.IssuerKeyHash(r.HashAlgorithm)
+		dbVal, caErr := v.cert.IssuerKeyHash(entity.Hash)
+		reqVal, reqErr := v.cert.IssuerKeyHash(r.HashAlgorithm)
 
 		if caErr != nil || reqErr != nil {
-			logx.Error("Failed to get issuer key hash", "issuer", v.issuer, "err", errors.Join(caErr, reqErr))
-			return ocsp.ServerFailed, fmt.Errorf("internal error")
+			return nil, fmt.Errorf("failed create issuer key hash (%d): %w", id, err)
 		}
 
-		caHex := hex.EncodeToString(caVal)
-
-		if data[0].IssuerKeyHash != caHex || caHex != hex.EncodeToString(reqVal) {
-			return x509cert.OCSPStatusUnknown, nil
+		if data[0].IssuerKeyHash != hex.EncodeToString(dbVal) ||
+			hex.EncodeToString(r.IssuerKeyHash) != hex.EncodeToString(reqVal) {
+			return &pki.OCSPResponse{Status: pki.OCSPStatusUnknown}, nil
 		}
 	}
 
 	{
-		caVal, caErr := v.cert.Cert.IssuerNameHash(entity.Hash)
-		reqVal, reqErr := v.cert.Cert.IssuerNameHash(r.HashAlgorithm)
+		dbVal, caErr := v.cert.IssuerNameHash(entity.Hash)
+		reqVal, reqErr := v.cert.IssuerNameHash(r.HashAlgorithm)
 
 		if caErr != nil || reqErr != nil {
 			logx.Error("Failed to get issuer name hash", "issuer", v.issuer, "err", errors.Join(caErr, reqErr))
-			return ocsp.ServerFailed, fmt.Errorf("internal error")
+			return nil, fmt.Errorf("failed create issuer name hash (%d): %w", id, err)
 		}
 
-		caHex := hex.EncodeToString(caVal)
-
-		if data[0].IssuerNameHash != caHex || caHex != hex.EncodeToString(reqVal) {
-			return x509cert.OCSPStatusUnknown, nil
+		if data[0].IssuerNameHash != hex.EncodeToString(dbVal) ||
+			hex.EncodeToString(r.IssuerNameHash) != hex.EncodeToString(reqVal) {
+			return &pki.OCSPResponse{Status: pki.OCSPStatusUnknown}, nil
 		}
 	}
 
 	if data[0].Revoked {
-		return x509cert.OCSPStatusRevoked, nil
+		return &pki.OCSPResponse{
+			Status:           pki.OCSPStatusRevoked,
+			RevokedAt:        data[0].UpdatedAt,
+			RevocationReason: pki.OCSPRevocationReason(data[0].RevokedReason),
+		}, nil
 	}
 
-	return x509cert.OCSPStatusGood, nil
+	return &pki.OCSPResponse{Status: pki.OCSPStatusGood}, nil
 }

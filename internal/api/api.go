@@ -16,10 +16,8 @@ import (
 )
 
 type API struct {
-	apiRoute  web.Router
-	ocspRoute web.Router
-	crlRoute  web.Router
-	crtRoute  web.Router
+	apiRoute web.Router
+	pkiRoute web.Router
 
 	entityRepo *entity.Repo
 	certStore  *certs.Store
@@ -30,18 +28,13 @@ func NewAPI(sp web.ServerPool, r *entity.Repo, cs *certs.Store) (*API, error) {
 		entityRepo: r,
 		certStore:  cs,
 	}
+
 	var ok bool
 	if obj.apiRoute, ok = sp.ByTag("main"); !ok {
 		return nil, fmt.Errorf("'main' server does not exist")
 	}
-	if obj.ocspRoute, ok = sp.ByTag("ocsp"); !ok {
-		return nil, fmt.Errorf("'ocsp' server does not exist")
-	}
-	if obj.crlRoute, ok = sp.ByTag("crl"); !ok {
-		return nil, fmt.Errorf("'crl' server does not exist")
-	}
-	if obj.crtRoute, ok = sp.ByTag("crt"); !ok {
-		return nil, fmt.Errorf("'crt' server does not exist")
+	if obj.pkiRoute, ok = sp.ByTag("pki"); !ok {
+		return nil, fmt.Errorf("'pki' server does not exist")
 	}
 
 	return obj, nil
@@ -49,7 +42,7 @@ func NewAPI(sp web.ServerPool, r *entity.Repo, cs *certs.Store) (*API, error) {
 
 func (v *API) Up(ctx context.Context) error {
 	v.addOCSPHandlers()
-	v.addCrtHandlers()
+	v.addRootCrtHandlers()
 	v.addCrlHandlers()
 	v.updateCrlTicker(ctx)
 	v.autoCleanCrlTicker(ctx)

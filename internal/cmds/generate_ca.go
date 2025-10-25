@@ -6,22 +6,15 @@
 package cmds
 
 import (
-	"crypto/x509"
 	"fmt"
 	"strings"
 	"time"
 
 	"go.osspkg.com/console"
 	"go.osspkg.com/do"
-	"go.osspkg.com/encrypt/x509cert"
+	"go.osspkg.com/encrypt/pki"
 	"go.osspkg.com/ioutils/fs"
 )
-
-var _algorithms = map[string]x509.SignatureAlgorithm{
-	"rsa256": x509.SHA256WithRSA,
-	"rsa384": x509.SHA384WithRSA,
-	"rsa512": x509.SHA512WithRSA,
-}
 
 func GenerateCA() console.CommandGetter {
 	return console.NewCommand(func(setter console.CommandSetter) {
@@ -31,17 +24,18 @@ func GenerateCA() console.CommandGetter {
 			f.StringVar("org", "Default Organization", "Organization Name")
 			f.StringVar("country", "", "Country Name")
 			f.StringVar("ocsp", "", "OCSP Server URL")
+			f.StringVar("cps", "", "Certificate Policies URL")
 			f.StringVar("icu", "", "Issuing Certificate URL")
 			f.StringVar("crl", "", "CRL Distribution Points")
-			f.StringVar("alg", "rsa256", "Signature Algorithm")
-			f.IntVar("bits", 2048, "Secret Key bits")
+			f.StringVar("alg", "ecdsa256", "Signature Algorithm")
+			f.StringVar("email", "", "Casper PKI Email Address")
 			f.IntVar("deadline", 10*365, "Validity period (in days)")
 			f.StringVar("output", fs.CurrentDir(), "Path for save certs")
 			f.StringVar("ca-cert", "", "Path for CA certificate for signing")
 			f.StringVar("ca-key", "", "Path for CA key for signing")
 		})
 		setter.ExecFunc(func(_ []string,
-			_cn, _org, _country, _ocsp, _icu, _crl, _alg string, _bits, _deadline int64, _output string,
+			_cn, _org, _country, _ocsp, _cps, _icu, _crl, _alg, _email string, _deadline int64, _output string,
 			_caCertPath, _caKeyPath string,
 		) {
 			alg, ok := _algorithms[_alg]
@@ -51,40 +45,45 @@ func GenerateCA() console.CommandGetter {
 
 			validityPeriod := time.Duration(_deadline) * time.Hour * 24
 
-			cfg := x509cert.Config{
-				Organization:       _org,
-				Country:            _country,
+			cfg := pki.Config{
 				SignatureAlgorithm: alg,
+				Organization:       strings.TrimSpace(_org),
+				Country:            strings.TrimSpace(_country),
+				CommonName:         strings.TrimSpace(_cn),
 			}
-			if _ocsp != "" {
-				cfg.OCSPServer = append(cfg.OCSPServer, _ocsp)
-			}
-			if _icu != "" {
-				cfg.IssuingCertificateURL = append(cfg.IssuingCertificateURL, _icu)
-			}
-			if _crl != "" {
-				cfg.CRLDistributionPoints = append(cfg.CRLDistributionPoints, _crl)
-			}
+			cfg.OCSPServerURLs = append(cfg.OCSPServerURLs, _ocsp)
+			cfg.IssuingCertificateURLs = append(cfg.IssuingCertificateURLs, _icu)
+			cfg.CRLDistributionPointURLs = append(cfg.CRLDistributionPointURLs, _crl)
+			cfg.CertificatePoliciesURLs = append(cfg.CertificatePoliciesURLs, _cps)
+			cfg.EmailAddress = append(cfg.EmailAddress, _email)
 
-			rootCA := x509cert.Cert{
-				Cert: &x509cert.RawCert{},
-				Key:  &x509cert.RawKey{},
-			}
+			rootCA := pki.Certificate{}
 			if _caCertPath != "" && _caKeyPath != "" {
-				console.FatalIfErr(rootCA.Cert.DecodePEMFile(_caCertPath), "failed decode CA certificate")
-				console.FatalIfErr(rootCA.Key.DecodePEMFile(_caKeyPath), "failed decode CA key")
-				if rootCA.IsEmpty() {
-					console.Fatalf("CA certificate is empty")
+				console.FatalIfErr(rootCA.LoadCert(_caCertPath), "failed decode CA certificate")
+				console.FatalIfErr(rootCA.LoadKey(_caKeyPath), "failed decode CA private key")
+				if !rootCA.IsValidPair() {
+					console.Fatalf("invalid CA certificate")
 				}
 			}
 
-			cert, err := x509cert.NewCA(cfg, &rootCA, int(_bits), validityPeriod, 1, _cn)
+			var (
+				err  error
+				cert *pki.Certificate
+			)
+			if !rootCA.IsValidPair() {
+				cert, err = pki.NewCA(cfg, validityPeriod, time.Now().Unix(), true)
+			} else {
+				cert, err = pki.NewIntermediateCA(cfg, rootCA, validityPeriod, time.Now().Unix())
+			}
 			console.FatalIfErr(err, "failed to create CA")
 
-			certFileName := fmt.Sprintf("%s/%s.crt", _output, strings.ToLower(strings.ReplaceAll(_cn, " ", "_")))
-			console.FatalIfErr(cert.Cert.EncodePEMFile(certFileName), "failed save CA certificate")
-			keyFileName := fmt.Sprintf("%s/%s.key", _output, strings.ToLower(strings.ReplaceAll(_cn, " ", "_")))
-			console.FatalIfErr(cert.Key.EncodePEMFile(keyFileName), "failed save CA key")
+			certName := strings.ToLower(strings.ReplaceAll(_cn, " ", "_"))
+			console.FatalIfErr(
+				cert.SaveCert(fmt.Sprintf("%s/%s.crt", _output, certName)),
+				"failed save CA certificate")
+			console.FatalIfErr(
+				cert.SaveKey(fmt.Sprintf("%s/%s.key", _output, certName)),
+				"failed save CA private key")
 		})
 	})
 }

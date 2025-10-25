@@ -7,41 +7,29 @@ package client
 
 import (
 	"context"
-	"encoding/base64"
+	"crypto/x509"
 	"fmt"
 	"net/url"
 	"runtime"
 	"strings"
 
-	"go.osspkg.com/encrypt/aesgcm"
 	"go.osspkg.com/goppy/v2/auth/signature"
 	wc "go.osspkg.com/goppy/v2/web/client"
 	"go.osspkg.com/goppy/v2/web/client/comparison"
 )
 
 type Client interface {
-	RenewalV1(ctx context.Context, force bool, format RenewalFormat, domain string) (*RenewalModel, error)
+	RenewalV1(ctx context.Context, force bool, csr x509.CertificateRequest) (*RenewalModel, error)
 }
 
 type _client struct {
 	cfg *Config
 	cli wc.HTTPClient
-	enc *aesgcm.Codec
 }
 
 func New(c Config) (Client, error) {
 	obj := &_client{
 		cfg: &c,
-	}
-
-	b, err := base64.StdEncoding.DecodeString(obj.cfg.EncryptKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode client encrypt key: %w", err)
-	}
-
-	obj.enc, err = aesgcm.New(b)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create client encrypt key: %w", err)
 	}
 
 	obj.cfg.Address = strings.TrimRight(c.Address, "/")
@@ -65,7 +53,6 @@ func New(c Config) (Client, error) {
 		}),
 		wc.WithComparisonType(
 			comparison.JSON{},
-			comparison.BYTES{},
 		),
 		wc.WithSignatures(map[string]signature.Signature{
 			uri.Host: signature.NewSHA1(obj.cfg.AuthID, obj.cfg.AuthKey),

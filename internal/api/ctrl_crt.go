@@ -9,21 +9,16 @@ import (
 	"net/http"
 	"net/url"
 
+	"go.osspkg.com/encrypt/pki"
 	"go.osspkg.com/goppy/v2/web"
 	"go.osspkg.com/logx"
 )
 
-func (v *API) addCrtHandlers() {
+func (v *API) addRootCrtHandlers() {
 	for _, cert := range v.certStore.List() {
-		issuer := cert.CA.Cert.Certificate.Issuer.String()
+		issuer := cert.CA.Crt.Issuer.String()
 
-		der, err := cert.CA.Cert.EncodeDER()
-		if err != nil {
-			logx.Error("Failed to encode der certificate", "issuer", issuer, "err", err)
-			continue
-		}
-
-		for _, addr := range cert.CA.Cert.Certificate.IssuingCertificateURL {
+		for _, addr := range cert.CA.Crt.IssuingCertificateURL {
 			uri, err := url.ParseRequestURI(addr)
 			if err != nil {
 				logx.Error("Failed to parse issuing server URI", "issuer", issuer, "url", addr, "err", err)
@@ -32,8 +27,8 @@ func (v *API) addCrtHandlers() {
 
 			logx.Info("Adding issuing server URL", "issuer", issuer, "url", uri.Path)
 
-			v.crtRoute.Get(uri.Path, func() func(ctx web.Ctx) {
-				der := der
+			v.pkiRoute.Get(uri.Path, func() func(ctx web.Ctx) {
+				der := pki.MarshalCrtDER(*cert.CA.Crt)
 				issuer := issuer
 
 				return func(ctx web.Ctx) {

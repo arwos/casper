@@ -6,23 +6,26 @@
 package api
 
 import (
+	"context"
 	"crypto"
 	"crypto/x509"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
-	"go.osspkg.com/encrypt/aesgcm"
-	"go.osspkg.com/encrypt/x509cert"
+	"github.com/google/uuid"
+	"go.osspkg.com/do"
+	"go.osspkg.com/encrypt/pki"
 	"go.osspkg.com/errors"
 	"go.osspkg.com/goppy/v2/auth/signature"
 	"go.osspkg.com/goppy/v2/web"
 	"go.osspkg.com/logx"
 	"go.osspkg.com/validate"
+
+	"go.arwos.org/casper/internal/pkgs/certs"
 
 	"go.arwos.org/casper/client"
 	"go.arwos.org/casper/internal/entity"
@@ -36,255 +39,294 @@ var _sigAlg = map[string]crypto.Hash{
 
 var (
 	errForbidden      = errors.New("forbidden")
+	errInternalError  = errors.New("internal error")
 	errInvalidRequest = errors.New("invalid request")
-	errInvalidAuthAlg = errors.New("invalid auth algorithm")
 )
 
 func (v *API) addApiHandlers() {
-	v.apiRoute.Use(web.ThrottlingMiddleware(100))
-	v.apiRoute.Post(client.PathRenewalV1, v.RenewCert)
+	v.apiRoute.Use(
+		web.ThrottlingMiddleware(100),
+		v.authzValidate(),
+	)
+	v.apiRoute.Post(client.PathRenewalV1, v.RenewCertV1)
 }
 
-//nolint:gocyclo
-func (v *API) RenewCert(wc web.Ctx) {
-	sigData, err := signature.Decode(wc.Header())
-	if err != nil {
-		wc.ErrorJSON(http.StatusForbidden, errForbidden)
-		return
-	}
+const (
+	userRequestCtx       apiCtx = "renew_cert_request"
+	userAccessDomainsCtx apiCtx = "user_access_domains"
+	ownerIdCtx           apiCtx = "owner_id"
+)
 
-	sigAlg, ok := _sigAlg[sigData.Alg]
-	if !ok {
-		wc.ErrorJSON(http.StatusBadRequest, errInvalidAuthAlg)
-		return
-	}
+func (v *API) authzValidate() web.Middleware {
+	return func(next func(web.Ctx)) func(web.Ctx) {
+		return func(wc web.Ctx) {
+			data, err := signature.Decode(wc.Header())
+			if err != nil {
+				wc.ErrorJSON(http.StatusForbidden, errForbidden,
+					"authorization", "invalid authorization header")
+				return
+			}
 
-	id, err := strconv.ParseInt(sigData.ID, 10, 64)
-	if err != nil {
-		logx.Warn("failed to parse api id", "id", sigData.ID, "err", err)
-		wc.ErrorJSON(http.StatusForbidden, err)
-		return
-	}
+			id, err := uuid.Parse(data.ID)
+			if err != nil {
+				wc.ErrorJSON(http.StatusForbidden, errForbidden,
+					"authorization", "invalid token id", "err", err.Error())
+				return
+			}
 
-	var req []byte
-	if err = wc.BindBytes(&req); err != nil {
-		logx.Warn("failed to bind request", "id", sigData.ID, "err", err)
-		wc.ErrorJSON(http.StatusBadRequest, err)
-		return
-	}
+			alg, ok := _sigAlg[data.Alg]
+			if !ok {
+				wc.ErrorJSON(http.StatusForbidden, errForbidden,
+					"authorization", "invalid algorithm", "alg", data.Alg)
+				return
+			}
 
-	model := client.RenewalRequest{}
-	if err = json.Unmarshal(req, &model); err != nil {
-		wc.ErrorJSON(http.StatusInternalServerError, err)
-		return
-	}
+			var req []byte
+			if err = wc.BindBytes(&req); err != nil {
+				wc.ErrorJSON(http.StatusForbidden, errForbidden,
+					"authorization", "failed read request", "err", err.Error())
+				return
+			}
 
-	model.Domain = strings.TrimSpace(strings.ToLower(model.Domain))
+			auth, err := v.entityRepo.SelectAuthByTokenId(wc.Context(), id)
+			if err != nil {
+				logx.Error("failed to fetch auth by token id", "id", id, "err", err)
+				wc.ErrorJSON(http.StatusInternalServerError, errInternalError)
+				return
+			}
 
-	if !validate.IsValidDomain(model.Domain) {
-		wc.ErrorJSON(http.StatusBadRequest, errInvalidRequest, "invalid domain", model.Domain)
-		return
-	}
+			if len(auth) != 1 || auth[0].TokenId != id || auth[0].Locked || len(auth[0].Domains) == 0 {
+				wc.ErrorJSON(http.StatusForbidden, errForbidden,
+					"authorization", "account not found", "id", id)
+				return
+			}
 
-	auth, err := v.entityRepo.SelectAuthByID(wc.Context(), id)
-	if err != nil {
-		logx.Error("failed to find auth", "id", sigData.ID, "err", err)
-		wc.ErrorJSON(http.StatusInternalServerError, err)
-		return
-	}
+			sig := signature.NewCustomSignature(auth[0].TokenId.String(), auth[0].TokenKey, data.Alg, alg)
+			if !sig.Verify(req, data.Sig) {
+				wc.ErrorJSON(http.StatusForbidden, errForbidden,
+					"authorization", "invalid signature", "id", data.ID, "alg", data.Alg)
+				return
+			}
 
-	if len(auth) != 1 || auth[0].ID != id || auth[0].Locked {
-		wc.ErrorJSON(http.StatusForbidden, errForbidden)
-		return
-	}
+			wc.SetContextValue(userRequestCtx, &req)
+			wc.SetContextValue(userAccessDomainsCtx, auth[0].Domains)
+			wc.SetContextValue(ownerIdCtx, auth[0].ID)
 
-	encKey, err := base64.StdEncoding.DecodeString(auth[0].EncryptKey)
-	if err != nil {
-		wc.ErrorJSON(http.StatusInternalServerError, err)
-		return
-	}
-
-	sig := signature.NewCustomSignature(sigData.ID, auth[0].Token, sigData.Alg, sigAlg)
-	if !sig.Verify(req, sigData.Sig) {
-		wc.ErrorJSON(http.StatusForbidden, errForbidden)
-		return
-	}
-
-	var caDomain string
-	reqDomainLevels := validate.CountDomainLevels(model.Domain)
-	for _, domain := range auth[0].Domains {
-		if validate.CountDomainLevels(domain)+1 != reqDomainLevels {
-			continue
+			next(wc)
 		}
-		if !strings.HasSuffix(model.Domain, domain) {
-			continue
+	}
+}
+
+func (v *API) validateCRS(csr *x509.CertificateRequest) error {
+	if len(csr.IPAddresses) > 0 {
+		return fmt.Errorf("contain IP Addresses")
+	}
+
+	if len(csr.DNSNames) == 0 {
+		return fmt.Errorf("require DNS Names")
+	}
+
+	for _, domain := range csr.DNSNames {
+		if !validate.IsValidDomain(domain) {
+			return fmt.Errorf("invalid domain: %s", domain)
 		}
-		caDomain = domain
-		break
 	}
 
-	if len(caDomain) == 0 {
-		wc.ErrorJSON(http.StatusBadRequest, errInvalidRequest, "unsupported domain", model.Domain)
-		return
+	return nil
+}
+
+func (v *API) getRootCertificate(domains []string) (*certs.Certificate, error) {
+	domain := ""
+	for _, name := range domains {
+		level2 := validate.GetDomainLevel(name, 2)
+		if domain == "" {
+			domain = level2
+		} else if domain != level2 {
+			return nil, fmt.Errorf("issuing certificates for different level 2 domains is prohibited")
+		}
 	}
 
-	enc, err := aesgcm.New(encKey)
-	if err != nil {
-		wc.ErrorJSON(http.StatusInternalServerError, err)
-		return
+	if len(domain) == 0 {
+		return nil, fmt.Errorf("invalid domain level 2")
 	}
 
-	ca, ok := v.certStore.Get(caDomain)
+	ca, ok := v.certStore.Get(strings.Trim(domain, "."))
 	if !ok {
-		wc.ErrorJSON(http.StatusBadRequest, errInvalidRequest, "unsupported domain", model.Domain)
-		return
+		return nil, fmt.Errorf("not found CA for domain: %s", domain)
 	}
 
-	exists, err := v.entityRepo.SelectCertNonRevokedByDomain(wc.Context(), model.Domain)
+	return ca, nil
+}
+
+func (v *API) createAndSignCertificate(
+	ctx context.Context, ca *certs.Certificate, csr *x509.CertificateRequest, model *entity.Cert,
+) (*x509.Certificate, error) {
+	if err := v.entityRepo.CreateCert(ctx, model); err != nil {
+		return nil, fmt.Errorf("failed to create new certificate: %w", err)
+	}
+
+	entityCertDomains := do.Convert[string, *entity.CertDomain](csr.DNSNames,
+		func(value string, _ int) *entity.CertDomain {
+			return &entity.CertDomain{
+				Domain:       value,
+				SerialNumber: model.SerialNumber,
+			}
+		})
+
+	if err := v.entityRepo.CreateBulkCertDomain(ctx, entityCertDomains); err != nil {
+		return nil, fmt.Errorf("failed to create domain certificates: %w", err)
+	}
+
+	newCert, err := pki.SignCSR(
+		pki.Config{IssuingCertificateURLs: ca.ICUs},
+		*ca.CA,
+		*csr,
+		time.Duration(ca.Days)*time.Hour*24,
+		model.SerialNumber,
+	)
 	if err != nil {
-		wc.ErrorJSON(http.StatusInternalServerError, err)
+		return nil, fmt.Errorf("failed to sign new certificate: %w", err)
+	}
+
+	model.Revoked = false
+	model.CreatedAt = newCert.NotBefore
+	model.ValidUntil = newCert.NotAfter
+	model.Subject = newCert.Subject.String()
+
+	fp, err := (&pki.Certificate{Crt: newCert}).FingerPrint(entity.Hash)
+	if err != nil {
+		return nil, fmt.Errorf("failed to calculate fingerprint: %w", err)
+	}
+	model.FingerPrint = hex.EncodeToString(fp)
+
+	ikh, err := ca.CA.IssuerKeyHash(entity.Hash)
+	if err != nil {
+		return nil, fmt.Errorf("failed to calculate issuer key hash: %w", err)
+	}
+	model.IssuerKeyHash = hex.EncodeToString(ikh)
+
+	inh, err := ca.CA.IssuerNameHash(entity.Hash)
+	if err != nil {
+		return nil, fmt.Errorf("failed to calculate issuer name hash: %w", err)
+	}
+	model.IssuerNameHash = hex.EncodeToString(inh)
+
+	if err = v.entityRepo.UpdateCertBySerialNumber(ctx, model); err != nil {
+		return nil, fmt.Errorf("failed to update certificate: %w", err)
+	}
+
+	return newCert, nil
+}
+
+func (v *API) RenewCertV1(wc web.Ctx) {
+	ownerId, ok := wc.GetContextValue(ownerIdCtx).(int64)
+	if !ok || ownerId <= 0 {
+		logx.Error("failed to fetch owner id", "ownerId", ownerId)
+		wc.ErrorJSON(http.StatusBadRequest, errInvalidRequest)
 		return
 	}
 
-	certModel := entity.Cert{
-		Owner:   auth[0].ID,
-		Domain:  model.Domain,
+	userDomains, ok := wc.GetContextValue(userAccessDomainsCtx).([]string)
+	if !ok || len(userDomains) == 0 {
+		logx.Error("failed to fetch user access domains",
+			"ownerId", ownerId, "userDomains", userDomains)
+		wc.ErrorJSON(http.StatusBadRequest, errInvalidRequest)
+		return
+	}
+
+	req, ok := wc.GetContextValue(userRequestCtx).(*[]byte)
+	if !ok || req == nil || len(*req) == 0 {
+		logx.Error("failed to fetch renew certificate request")
+		wc.ErrorJSON(http.StatusBadRequest, errInvalidRequest)
+		return
+	}
+
+	renewalRequest := client.RenewalRequest{}
+	if err := json.Unmarshal(*req, &renewalRequest); err != nil {
+		wc.ErrorJSON(http.StatusBadRequest, errInvalidRequest,
+			"request", "unmarshal request", "err", err.Error())
+		return
+	}
+
+	csr, err := pki.UnmarshalCsrPEM([]byte(renewalRequest.CSR))
+	if err != nil {
+		wc.ErrorJSON(http.StatusBadRequest, errInvalidRequest,
+			"request", "unmarshal csr pem", "err", err.Error())
+		return
+	}
+
+	if err = v.validateCRS(csr); err != nil {
+		wc.ErrorJSON(http.StatusBadRequest, errInvalidRequest,
+			"request", "validate", "invalid_csr_attribute", err.Error())
+		return
+	}
+
+	ca, err := v.getRootCertificate(csr.DNSNames)
+	if err != nil {
+		wc.ErrorJSON(http.StatusBadRequest, errInvalidRequest,
+			"request", "validate", "err", err.Error())
+		return
+	}
+
+	exists, err := v.entityRepo.SelectCertNonRevokedByDomains(wc.Context(), csr.DNSNames)
+	if err != nil {
+		logx.Error("failed to fetch cert non revoked by domains", "domains", csr.DNSNames, "err", err)
+		wc.ErrorJSON(http.StatusInternalServerError, errInternalError)
+		return
+	}
+
+	entityModel := entity.Cert{
+		Owner:   ownerId,
 		Revoked: true,
 	}
 
 	resp := client.RenewalModel{
 		Status: client.RenewalStatusIssued,
-		Format: model.Format,
 	}
 
 	if len(exists) > 0 {
 		for _, exist := range exists {
-			if exist.Owner != certModel.Owner {
+			if exist.Owner != entityModel.Owner {
 				resp.Status = client.RenewalStatusFail
-				sendResponse(wc, &resp, enc, certModel.SerialNumber, certModel.Domain)
+				wc.JSON(http.StatusOK, &resp)
 				return
 			}
 
-			if exist.ValidUntil.After(time.Now().AddDate(0, 0, -14)) && !model.Force {
+			if !renewalRequest.Force && exist.ValidUntil.After(time.Now().AddDate(0, 0, -3)) {
 				resp.Status = client.RenewalStatusActual
-				sendResponse(wc, &resp, enc, certModel.SerialNumber, certModel.Domain)
+				wc.JSON(http.StatusOK, &resp)
 				return
 			}
 		}
 
-		if err = v.entityRepo.UpdateCertsAsRevoked(wc.Context(), certModel.Owner, certModel.Domain); err != nil {
-			wc.ErrorJSON(http.StatusInternalServerError, err)
+		ids := do.Convert[entity.Cert, int64](exists, func(value entity.Cert, _ int) int64 {
+			return value.SerialNumber
+		})
+
+		if err = v.entityRepo.UpdateCertsAsRevoked(wc.Context(),
+			entityModel.Owner, ids, int64(pki.OCSPRevocationReasonSuperseded),
+		); err != nil {
+			logx.Error("failed to revoke actual certificates", "domains", csr.DNSNames, "err", err)
+			wc.ErrorJSON(http.StatusInternalServerError, errInternalError)
 			return
 		}
 	}
 
-	if err = v.entityRepo.CreateCert(wc.Context(), &certModel); err != nil {
-		logx.Error("failed to create certificate",
-			"domain", model.Domain, "owner", certModel.Owner, "err", err)
-		wc.ErrorJSON(http.StatusInternalServerError, err)
-		return
-	}
-
-	cfg := x509cert.Config{
-		OCSPServer:            ca.CA.Cert.Certificate.OCSPServer,
-		IssuingCertificateURL: []string{ca.Icu},
-		CRLDistributionPoints: ca.CA.Cert.Certificate.CRLDistributionPoints,
-		SignatureAlgorithm:    x509.SHA256WithRSA,
-	}
-	newCert, err := x509cert.NewCert(
-		cfg, *ca.CA, 2048, time.Duration(ca.Days)*time.Hour*24, certModel.SerialNumber, model.Domain,
-	)
+	newCert, err := v.createAndSignCertificate(wc.Context(), ca, csr, &entityModel)
 	if err != nil {
-		logx.Error("failed to create certificate", "sn", certModel.SerialNumber, "domain", model.Domain, "err", err)
-		wc.ErrorJSON(http.StatusInternalServerError, err)
+		logx.Error("failed to create new certificate", "domains", csr.DNSNames, "err", err)
+		wc.ErrorJSON(http.StatusInternalServerError, errInternalError)
 		return
 	}
 
-	certModel.Revoked = false
-	certModel.CreatedAt = newCert.Cert.Certificate.NotBefore
-	certModel.ValidUntil = newCert.Cert.Certificate.NotAfter
-	certModel.Subject = cfg.ToSubject().String()
-
-	fp, err := newCert.Cert.FingerPrint(entity.Hash)
-	if err != nil {
-		logx.Error("failed to create certificate fingerprint",
-			"sn", certModel.SerialNumber, "domain", model.Domain, "err", err)
-		wc.ErrorJSON(http.StatusInternalServerError, err)
+	caPem, err1 := pki.MarshalCrtPEM(*ca.CA.Crt)
+	crtPem, err2 := pki.MarshalCrtPEM(*newCert)
+	if err1 != nil || err2 != nil {
+		wc.ErrorJSON(http.StatusInternalServerError, errors.Wrap(err1, err2))
 		return
 	}
-	certModel.FingerPrint = hex.EncodeToString(fp)
+	resp.CA = string(caPem)
+	resp.Cert = string(crtPem)
 
-	ikh, err := ca.CA.Cert.IssuerKeyHash(entity.Hash)
-	if err != nil {
-		logx.Error("failed to create certificate issuer key hash",
-			"sn", certModel.SerialNumber, "domain", model.Domain, "err", err)
-		wc.ErrorJSON(http.StatusInternalServerError, err)
-		return
-	}
-	certModel.IssuerKeyHash = hex.EncodeToString(ikh)
-
-	inh, err := ca.CA.Cert.IssuerNameHash(entity.Hash)
-	if err != nil {
-		logx.Error("failed to create certificate issuer name hash",
-			"sn", certModel.SerialNumber, "domain", model.Domain, "err", err)
-		wc.ErrorJSON(http.StatusInternalServerError, err)
-		return
-	}
-	certModel.IssuerNameHash = hex.EncodeToString(inh)
-
-	if err = v.entityRepo.UpdateCertBySerialNumber(wc.Context(), &certModel); err != nil {
-		logx.Error("failed to update certificate",
-			"sn", certModel.SerialNumber, "domain", model.Domain, "err", err)
-		wc.ErrorJSON(http.StatusInternalServerError, err)
-		return
-	}
-
-	switch model.Format {
-	case client.RenewalFormatPEM:
-		caB, err1 := ca.CA.Cert.EncodePEM()
-		certB, err2 := newCert.Cert.EncodePEM()
-		keyB, err3 := newCert.Key.EncodePEM()
-		if err1 != nil || err2 != nil || err3 != nil {
-			logx.Error("failed to build PEM",
-				"sn", certModel.SerialNumber, "domain", model.Domain, "err", errors.Wrap(err1, err2, err3))
-			wc.ErrorJSON(http.StatusInternalServerError, errors.Wrap(err1, err2, err3))
-			return
-		}
-		resp.CA = string(caB)
-		resp.Cert = string(certB)
-		resp.Key = string(keyB)
-
-	default:
-		caB, err1 := ca.CA.Cert.EncodeDER()
-		certB, err2 := newCert.Cert.EncodeDER()
-		keyB, err3 := newCert.Key.EncodeDER()
-		if err1 != nil || err2 != nil || err3 != nil {
-			logx.Error("failed to build DER",
-				"sn", certModel.SerialNumber, "domain", model.Domain, "err", errors.Wrap(err1, err2, err3))
-			wc.ErrorJSON(http.StatusInternalServerError, errors.Wrap(err1, err2, err3))
-			return
-		}
-		resp.CA = base64.StdEncoding.EncodeToString(caB)
-		resp.Cert = base64.StdEncoding.EncodeToString(certB)
-		resp.Key = base64.StdEncoding.EncodeToString(keyB)
-	}
-
-	sendResponse(wc, &resp, enc, certModel.SerialNumber, model.Domain)
-}
-
-func sendResponse(wc web.Ctx, resp *client.RenewalModel, enc *aesgcm.Codec, sn int64, domain string) {
-	b, err := json.Marshal(resp)
-	if err != nil {
-		logx.Error("failed to marshal response", "sn", sn, "domain", domain, "err", err)
-		wc.ErrorJSON(http.StatusInternalServerError, err)
-		return
-	}
-
-	encBody, err := enc.Encrypt(b)
-	if err != nil {
-		wc.ErrorJSON(http.StatusInternalServerError, err)
-		return
-	}
-
-	wc.Bytes(http.StatusOK, encBody)
+	wc.JSON(http.StatusOK, &resp)
 }

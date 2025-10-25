@@ -3,11 +3,6 @@
  *  Use of this source code is governed by a GPL-3.0 license that can be found in the LICENSE file.
  */
 
-package client
+package api
 
-type Config struct {
-	Address string `yaml:"address"`
-	Proxy   string `yaml:"proxy"`
-	AuthID  string `yaml:"auth_id"`
-	AuthKey string `yaml:"auth_key"`
-}
+type apiCtx string

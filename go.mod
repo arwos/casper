@@ -3,20 +3,20 @@ module go.arwos.org/casper
 go 1.25.0
 
 require (
+	github.com/google/uuid v1.6.0
 	go.arwos.org/casper/client v0.0.0
 	go.osspkg.com/console v0.3.3
-	go.osspkg.com/do v0.1.3
-	go.osspkg.com/encrypt v0.4.2
+	go.osspkg.com/do v0.2.1
+	go.osspkg.com/encrypt v0.5.1
 	go.osspkg.com/errors v0.4.0
 	go.osspkg.com/events v0.3.0
-	go.osspkg.com/goppy/v2 v2.4.5-0.20251018025447-a7cb8181eb99
+	go.osspkg.com/goppy/v2 v2.4.6
 	go.osspkg.com/ioutils v0.7.3
 	go.osspkg.com/logx v0.6.0
 	go.osspkg.com/routine v0.4.0
 	go.osspkg.com/syncing v0.4.3
 	go.osspkg.com/validate v0.1.0
 	go.osspkg.com/xc v0.4.0
-	golang.org/x/crypto v0.43.0
 )
 
 replace go.arwos.org/casper/client => ./client
@@ -44,7 +44,8 @@ require (
 	go.osspkg.com/static v1.4.0 // indirect
 	go.uber.org/automaxprocs v1.6.0 // indirect
 	go.uber.org/mock v0.5.0 // indirect
-	golang.org/x/exp v0.0.0-20251009144603-d2f985daa21b // indirect
+	golang.org/x/crypto v0.43.0 // indirect
+	golang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546 // indirect
 	golang.org/x/mod v0.29.0 // indirect
 	golang.org/x/net v0.46.0 // indirect
 	golang.org/x/sync v0.17.0 // indirect

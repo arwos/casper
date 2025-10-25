@@ -18,7 +18,7 @@ var (
 	_ easyjson.Marshaler
 )
 
-func easyjson86ac526dDecodeGoArwosOrgCasperClient(in *jlexer.Lexer, out *RenewalRequest) {
+func easyjsonCb6870ccDecodeGoArwosOrgCasperClient(in *jlexer.Lexer, out *RenewalRequest) {
 	isTopLevel := in.IsStart()
 	if in.IsNull() {
 		if isTopLevel {
@@ -38,17 +38,11 @@ func easyjson86ac526dDecodeGoArwosOrgCasperClient(in *jlexer.Lexer, out *Renewal
 			} else {
 				out.Force = bool(in.Bool())
 			}
-		case "domain":
+		case "csr":
 			if in.IsNull() {
 				in.Skip()
 			} else {
-				out.Domain = string(in.String())
-			}
-		case "format":
-			if in.IsNull() {
-				in.Skip()
-			} else {
-				out.Format = RenewalFormat(in.String())
+				out.CSR = string(in.String())
 			}
 		default:
 			in.SkipRecursive()
@@ -60,7 +54,7 @@ func easyjson86ac526dDecodeGoArwosOrgCasperClient(in *jlexer.Lexer, out *Renewal
 		in.Consumed()
 	}
 }
-func easyjson86ac526dEncodeGoArwosOrgCasperClient(out *jwriter.Writer, in RenewalRequest) {
+func easyjsonCb6870ccEncodeGoArwosOrgCasperClient(out *jwriter.Writer, in RenewalRequest) {
 	out.RawByte('{')
 	first := true
 	_ = first
@@ -70,14 +64,9 @@ func easyjson86ac526dEncodeGoArwosOrgCasperClient(out *jwriter.Writer, in Renewa
 		out.Bool(bool(in.Force))
 	}
 	{
-		const prefix string = ",\"domain\":"
+		const prefix string = ",\"csr\":"
 		out.RawString(prefix)
-		out.String(string(in.Domain))
-	}
-	{
-		const prefix string = ",\"format\":"
-		out.RawString(prefix)
-		out.String(string(in.Format))
+		out.String(string(in.CSR))
 	}
 	out.RawByte('}')
 }
@@ -85,27 +74,27 @@ func easyjson86ac526dEncodeGoArwosOrgCasperClient(out *jwriter.Writer, in Renewa
 // MarshalJSON supports json.Marshaler interface
 func (v RenewalRequest) MarshalJSON() ([]byte, error) {
 	w := jwriter.Writer{}
-	easyjson86ac526dEncodeGoArwosOrgCasperClient(&w, v)
+	easyjsonCb6870ccEncodeGoArwosOrgCasperClient(&w, v)
 	return w.Buffer.BuildBytes(), w.Error
 }
 
 // MarshalEasyJSON supports easyjson.Marshaler interface
 func (v RenewalRequest) MarshalEasyJSON(w *jwriter.Writer) {
-	easyjson86ac526dEncodeGoArwosOrgCasperClient(w, v)
+	easyjsonCb6870ccEncodeGoArwosOrgCasperClient(w, v)
 }
 
 // UnmarshalJSON supports json.Unmarshaler interface
 func (v *RenewalRequest) UnmarshalJSON(data []byte) error {
 	r := jlexer.Lexer{Data: data}
-	easyjson86ac526dDecodeGoArwosOrgCasperClient(&r, v)
+	easyjsonCb6870ccDecodeGoArwosOrgCasperClient(&r, v)
 	return r.Error()
 }
 
 // UnmarshalEasyJSON supports easyjson.Unmarshaler interface
 func (v *RenewalRequest) UnmarshalEasyJSON(l *jlexer.Lexer) {
-	easyjson86ac526dDecodeGoArwosOrgCasperClient(l, v)
+	easyjsonCb6870ccDecodeGoArwosOrgCasperClient(l, v)
 }
-func easyjson86ac526dDecodeGoArwosOrgCasperClient1(in *jlexer.Lexer, out *RenewalModel) {
+func easyjsonCb6870ccDecodeGoArwosOrgCasperClient1(in *jlexer.Lexer, out *RenewalModel) {
 	isTopLevel := in.IsStart()
 	if in.IsNull() {
 		if isTopLevel {
@@ -125,12 +114,6 @@ func easyjson86ac526dDecodeGoArwosOrgCasperClient1(in *jlexer.Lexer, out *Renewa
 			} else {
 				out.Status = RenewalStatus(in.String())
 			}
-		case "format":
-			if in.IsNull() {
-				in.Skip()
-			} else {
-				out.Format = RenewalFormat(in.String())
-			}
 		case "ca":
 			if in.IsNull() {
 				in.Skip()
@@ -143,12 +126,6 @@ func easyjson86ac526dDecodeGoArwosOrgCasperClient1(in *jlexer.Lexer, out *Renewa
 			} else {
 				out.Cert = string(in.String())
 			}
-		case "key":
-			if in.IsNull() {
-				in.Skip()
-			} else {
-				out.Key = string(in.String())
-			}
 		default:
 			in.SkipRecursive()
 		}
@@ -159,7 +136,7 @@ func easyjson86ac526dDecodeGoArwosOrgCasperClient1(in *jlexer.Lexer, out *Renewa
 		in.Consumed()
 	}
 }
-func easyjson86ac526dEncodeGoArwosOrgCasperClient1(out *jwriter.Writer, in RenewalModel) {
+func easyjsonCb6870ccEncodeGoArwosOrgCasperClient1(out *jwriter.Writer, in RenewalModel) {
 	out.RawByte('{')
 	first := true
 	_ = first
@@ -167,11 +144,6 @@ func easyjson86ac526dEncodeGoArwosOrgCasperClient1(out *jwriter.Writer, in Renew
 		const prefix string = ",\"status\":"
 		out.RawString(prefix[1:])
 		out.String(string(in.Status))
-	}
-	{
-		const prefix string = ",\"format\":"
-		out.RawString(prefix)
-		out.String(string(in.Format))
 	}
 	if in.CA != "" {
 		const prefix string = ",\"ca\":"
@@ -183,34 +155,29 @@ func easyjson86ac526dEncodeGoArwosOrgCasperClient1(out *jwriter.Writer, in Renew
 		out.RawString(prefix)
 		out.String(string(in.Cert))
 	}
-	if in.Key != "" {
-		const prefix string = ",\"key\":"
-		out.RawString(prefix)
-		out.String(string(in.Key))
-	}
 	out.RawByte('}')
 }
 
 // MarshalJSON supports json.Marshaler interface
 func (v RenewalModel) MarshalJSON() ([]byte, error) {
 	w := jwriter.Writer{}
-	easyjson86ac526dEncodeGoArwosOrgCasperClient1(&w, v)
+	easyjsonCb6870ccEncodeGoArwosOrgCasperClient1(&w, v)
 	return w.Buffer.BuildBytes(), w.Error
 }
 
 // MarshalEasyJSON supports easyjson.Marshaler interface
 func (v RenewalModel) MarshalEasyJSON(w *jwriter.Writer) {
-	easyjson86ac526dEncodeGoArwosOrgCasperClient1(w, v)
+	easyjsonCb6870ccEncodeGoArwosOrgCasperClient1(w, v)
 }
 
 // UnmarshalJSON supports json.Unmarshaler interface
 func (v *RenewalModel) UnmarshalJSON(data []byte) error {
 	r := jlexer.Lexer{Data: data}
-	easyjson86ac526dDecodeGoArwosOrgCasperClient1(&r, v)
+	easyjsonCb6870ccDecodeGoArwosOrgCasperClient1(&r, v)
 	return r.Error()
 }
 
 // UnmarshalEasyJSON supports easyjson.Unmarshaler interface
 func (v *RenewalModel) UnmarshalEasyJSON(l *jlexer.Lexer) {
-	easyjson86ac526dDecodeGoArwosOrgCasperClient1(l, v)
+	easyjsonCb6870ccDecodeGoArwosOrgCasperClient1(l, v)
 }

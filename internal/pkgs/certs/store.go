@@ -6,20 +6,21 @@
 package certs
 
 import (
+	"crypto/x509"
 	"fmt"
 	"time"
 
-	"go.osspkg.com/encrypt/x509cert"
+	"go.osspkg.com/encrypt/pki"
 	"go.osspkg.com/ioutils/cache"
 	"go.osspkg.com/syncing"
 	"go.osspkg.com/xc"
 )
 
 type Certificate struct {
-	Root *x509cert.Cert
-	CA   *x509cert.Cert
+	Root *x509.Certificate
+	CA   *pki.Certificate
 	Days int
-	Icu  string
+	ICUs []string
 	ttl  int64
 }
 
@@ -40,30 +41,36 @@ func NewStore(ctx xc.Context, c *ConfigGroup) (*Store, error) {
 	}
 
 	for _, conf := range c.Certs {
-		ca := &x509cert.Cert{
-			Cert: &x509cert.RawCert{},
-			Key:  &x509cert.RawKey{},
-		}
-		if err := ca.Cert.DecodePEMFile(conf.FileCACert); err != nil {
+		ca := &pki.Certificate{}
+		if err := ca.LoadCert(conf.FileCACert); err != nil {
 			return nil, fmt.Errorf("decode cert %q: %w", conf.FileCACert, err)
 		}
-		if err := ca.Key.DecodePEMFile(conf.FileCAKey); err != nil {
+		if err := ca.LoadKey(conf.FileCAKey); err != nil {
 			return nil, fmt.Errorf("decode key %q: %w", conf.FileCAKey, err)
 		}
 
-		rootCA := &x509cert.Cert{
-			Cert: &x509cert.RawCert{},
+		if !ca.IsCA() {
+			return nil, fmt.Errorf("file %v is not a CA", []string{conf.FileCACert, conf.FileCAKey})
 		}
-		if err := rootCA.Cert.DecodePEMFile(conf.FileRootCert); err != nil {
+		if !ca.IsValidPair() {
+			return nil, fmt.Errorf("file %v is not a valid pair", []string{conf.FileCACert, conf.FileCAKey})
+		}
+
+		rootCA := &pki.Certificate{}
+		if err := rootCA.LoadCert(conf.FileRootCert); err != nil {
 			return nil, fmt.Errorf("decode root cert %q: %w", conf.FileRootCert, err)
 		}
 
+		if !rootCA.IsCA() {
+			return nil, fmt.Errorf("file %v is not a CA", []string{conf.FileRootCert})
+		}
+
 		storeItem := &Certificate{
-			Root: rootCA,
+			Root: rootCA.Crt,
 			CA:   ca,
 			Days: conf.DefaultExpireDays,
-			ttl:  ca.Cert.Certificate.NotAfter.Unix(),
-			Icu:  conf.IssuingCertificateURL,
+			ICUs: conf.IssuingCertificateURLs,
+			ttl:  ca.Crt.NotAfter.Unix(),
 		}
 
 		obj.list.Append(storeItem)

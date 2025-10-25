@@ -8,7 +8,7 @@ import (
 	"go.osspkg.com/goppy/v2/orm"
 )
 
-const sqlCreateCert = `INSERT INTO "certs" ("owner", "domain", "subject", "fingerprint", "issuer_key_hash", "issuer_name_hash", "revoked", "created_at", "valid_until", "updated_at") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`
+const sqlCreateCert = `INSERT INTO "cert_info" ("owner", "subject", "fingerprint", "issuer_key_hash", "issuer_name_hash", "revoked", "revoked_reason", "created_at", "valid_until", "updated_at") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`
 
 func (v *Repo) CreateBulkCert(ctx context.Context, ms []*Cert, opts ...CreateOption) error {
 	if len(ms) == 0 {
@@ -22,10 +22,10 @@ func (v *Repo) CreateBulkCert(ctx context.Context, ms []*Cert, opts ...CreateOpt
 	}
 	buf.WriteString(` RETURNING ("id")`)
 	buf.WriteString(";")
-	return v.Master().Tx(ctx, "certs_create_bulk", func(tx orm.Tx) {
+	return v.Master().Tx(ctx, "cert_info_create_bulk", func(tx orm.Tx) {
 		for _, m := range ms {
 			tx.Query(func(q orm.Querier) {
-				q.SQL(buf.String(), m.Owner, m.Domain, m.Subject, m.FingerPrint, m.IssuerKeyHash, m.IssuerNameHash, m.Revoked, m.CreatedAt, m.ValidUntil, m.UpdatedAt)
+				q.SQL(buf.String(), m.Owner, m.Subject, m.FingerPrint, m.IssuerKeyHash, m.IssuerNameHash, m.Revoked, m.RevokedReason, m.CreatedAt, m.ValidUntil, m.UpdatedAt)
 				q.Bind(func(bind orm.Scanner) error {
 					return bind.Scan(&m.SerialNumber)
 				})
@@ -42,23 +42,23 @@ func (v *Repo) CreateCert(ctx context.Context, m *Cert, opts ...CreateOption) er
 	}
 	buf.WriteString(` RETURNING ("id")`)
 	buf.WriteString(";")
-	return v.Master().Query(ctx, "certs_create", func(q orm.Querier) {
-		q.SQL(buf.String(), m.Owner, m.Domain, m.Subject, m.FingerPrint, m.IssuerKeyHash, m.IssuerNameHash, m.Revoked, m.CreatedAt, m.ValidUntil, m.UpdatedAt)
+	return v.Master().Query(ctx, "cert_info_create", func(q orm.Querier) {
+		q.SQL(buf.String(), m.Owner, m.Subject, m.FingerPrint, m.IssuerKeyHash, m.IssuerNameHash, m.Revoked, m.RevokedReason, m.CreatedAt, m.ValidUntil, m.UpdatedAt)
 		q.Bind(func(bind orm.Scanner) error {
 			return bind.Scan(&m.SerialNumber)
 		})
 	})
 }
 
-const sqlSelectCursorCert = `SELECT "id", "owner", "domain", "subject", "fingerprint", "issuer_key_hash", "issuer_name_hash", "revoked", "created_at", "valid_until", "updated_at" FROM "certs" WHERE "id">$1 ORDER BY "id" LIMIT $2;`
+const sqlSelectCursorCert = `SELECT "id", "owner", "subject", "fingerprint", "issuer_key_hash", "issuer_name_hash", "revoked", "revoked_reason", "created_at", "valid_until", "updated_at" FROM "cert_info" WHERE "id">$1 ORDER BY "id" LIMIT $2;`
 
 func (v *Repo) SelectCertCursor(ctx context.Context, from int64, lim uint) ([]Cert, error) {
 	result := make([]Cert, 0, lim)
-	err := v.Sync().Query(ctx, "certs_read_all", func(q orm.Querier) {
+	err := v.Sync().Query(ctx, "cert_info_read_all", func(q orm.Querier) {
 		q.SQL(sqlSelectCursorCert, from, lim)
 		q.Bind(func(bind orm.Scanner) error {
 			m := Cert{}
-			if e := bind.Scan(&m.SerialNumber, &m.Owner, &m.Domain, &m.Subject, &m.FingerPrint, &m.IssuerKeyHash, &m.IssuerNameHash, &m.Revoked, &m.CreatedAt, &m.ValidUntil, &m.UpdatedAt); e != nil {
+			if e := bind.Scan(&m.SerialNumber, &m.Owner, &m.Subject, &m.FingerPrint, &m.IssuerKeyHash, &m.IssuerNameHash, &m.Revoked, &m.RevokedReason, &m.CreatedAt, &m.ValidUntil, &m.UpdatedAt); e != nil {
 				return e
 			}
 			result = append(result, m)
@@ -71,18 +71,18 @@ func (v *Repo) SelectCertCursor(ctx context.Context, from int64, lim uint) ([]Ce
 	return result, nil
 }
 
-const sqlSelectCertBySerialNumber = `SELECT "id", "owner", "domain", "subject", "fingerprint", "issuer_key_hash", "issuer_name_hash", "revoked", "created_at", "valid_until", "updated_at" FROM "certs" WHERE "id"=ANY($1);`
+const sqlSelectCertBySerialNumber = `SELECT "id", "owner", "subject", "fingerprint", "issuer_key_hash", "issuer_name_hash", "revoked", "revoked_reason", "created_at", "valid_until", "updated_at" FROM "cert_info" WHERE "id"=ANY($1);`
 
 func (v *Repo) SelectCertBySerialNumber(ctx context.Context, args ...int64) ([]Cert, error) {
 	if len(args) == 0 {
 		return nil, nil
 	}
 	result := make([]Cert, 0, len(args))
-	err := v.Sync().Query(ctx, "certs_read_by_id", func(q orm.Querier) {
+	err := v.Sync().Query(ctx, "cert_info_read_by_id", func(q orm.Querier) {
 		q.SQL(sqlSelectCertBySerialNumber, args)
 		q.Bind(func(bind orm.Scanner) error {
 			m := Cert{}
-			if e := bind.Scan(&m.SerialNumber, &m.Owner, &m.Domain, &m.Subject, &m.FingerPrint, &m.IssuerKeyHash, &m.IssuerNameHash, &m.Revoked, &m.CreatedAt, &m.ValidUntil, &m.UpdatedAt); e != nil {
+			if e := bind.Scan(&m.SerialNumber, &m.Owner, &m.Subject, &m.FingerPrint, &m.IssuerKeyHash, &m.IssuerNameHash, &m.Revoked, &m.RevokedReason, &m.CreatedAt, &m.ValidUntil, &m.UpdatedAt); e != nil {
 				return e
 			}
 			result = append(result, m)
@@ -95,18 +95,18 @@ func (v *Repo) SelectCertBySerialNumber(ctx context.Context, args ...int64) ([]C
 	return result, nil
 }
 
-const sqlSelectCertByOwner = `SELECT "id", "owner", "domain", "subject", "fingerprint", "issuer_key_hash", "issuer_name_hash", "revoked", "created_at", "valid_until", "updated_at" FROM "certs" WHERE "owner"=ANY($1);`
+const sqlSelectCertByOwner = `SELECT "id", "owner", "subject", "fingerprint", "issuer_key_hash", "issuer_name_hash", "revoked", "revoked_reason", "created_at", "valid_until", "updated_at" FROM "cert_info" WHERE "owner"=ANY($1);`
 
 func (v *Repo) SelectCertByOwner(ctx context.Context, args ...int64) ([]Cert, error) {
 	if len(args) == 0 {
 		return nil, nil
 	}
 	result := make([]Cert, 0, len(args))
-	err := v.Sync().Query(ctx, "certs_read_by_owner", func(q orm.Querier) {
+	err := v.Sync().Query(ctx, "cert_info_read_by_owner", func(q orm.Querier) {
 		q.SQL(sqlSelectCertByOwner, args)
 		q.Bind(func(bind orm.Scanner) error {
 			m := Cert{}
-			if e := bind.Scan(&m.SerialNumber, &m.Owner, &m.Domain, &m.Subject, &m.FingerPrint, &m.IssuerKeyHash, &m.IssuerNameHash, &m.Revoked, &m.CreatedAt, &m.ValidUntil, &m.UpdatedAt); e != nil {
+			if e := bind.Scan(&m.SerialNumber, &m.Owner, &m.Subject, &m.FingerPrint, &m.IssuerKeyHash, &m.IssuerNameHash, &m.Revoked, &m.RevokedReason, &m.CreatedAt, &m.ValidUntil, &m.UpdatedAt); e != nil {
 				return e
 			}
 			result = append(result, m)
@@ -119,42 +119,18 @@ func (v *Repo) SelectCertByOwner(ctx context.Context, args ...int64) ([]Cert, er
 	return result, nil
 }
 
-const sqlSelectCertByDomain = `SELECT "id", "owner", "domain", "subject", "fingerprint", "issuer_key_hash", "issuer_name_hash", "revoked", "created_at", "valid_until", "updated_at" FROM "certs" WHERE "domain"=ANY($1);`
-
-func (v *Repo) SelectCertByDomain(ctx context.Context, args ...string) ([]Cert, error) {
-	if len(args) == 0 {
-		return nil, nil
-	}
-	result := make([]Cert, 0, len(args))
-	err := v.Sync().Query(ctx, "certs_read_by_domain", func(q orm.Querier) {
-		q.SQL(sqlSelectCertByDomain, args)
-		q.Bind(func(bind orm.Scanner) error {
-			m := Cert{}
-			if e := bind.Scan(&m.SerialNumber, &m.Owner, &m.Domain, &m.Subject, &m.FingerPrint, &m.IssuerKeyHash, &m.IssuerNameHash, &m.Revoked, &m.CreatedAt, &m.ValidUntil, &m.UpdatedAt); e != nil {
-				return e
-			}
-			result = append(result, m)
-			return nil
-		})
-	})
-	if err != nil {
-		return nil, err
-	}
-	return result, nil
-}
-
-const sqlSelectCertBySubject = `SELECT "id", "owner", "domain", "subject", "fingerprint", "issuer_key_hash", "issuer_name_hash", "revoked", "created_at", "valid_until", "updated_at" FROM "certs" WHERE "subject"=ANY($1);`
+const sqlSelectCertBySubject = `SELECT "id", "owner", "subject", "fingerprint", "issuer_key_hash", "issuer_name_hash", "revoked", "revoked_reason", "created_at", "valid_until", "updated_at" FROM "cert_info" WHERE "subject"=ANY($1);`
 
 func (v *Repo) SelectCertBySubject(ctx context.Context, args ...string) ([]Cert, error) {
 	if len(args) == 0 {
 		return nil, nil
 	}
 	result := make([]Cert, 0, len(args))
-	err := v.Sync().Query(ctx, "certs_read_by_subject", func(q orm.Querier) {
+	err := v.Sync().Query(ctx, "cert_info_read_by_subject", func(q orm.Querier) {
 		q.SQL(sqlSelectCertBySubject, args)
 		q.Bind(func(bind orm.Scanner) error {
 			m := Cert{}
-			if e := bind.Scan(&m.SerialNumber, &m.Owner, &m.Domain, &m.Subject, &m.FingerPrint, &m.IssuerKeyHash, &m.IssuerNameHash, &m.Revoked, &m.CreatedAt, &m.ValidUntil, &m.UpdatedAt); e != nil {
+			if e := bind.Scan(&m.SerialNumber, &m.Owner, &m.Subject, &m.FingerPrint, &m.IssuerKeyHash, &m.IssuerNameHash, &m.Revoked, &m.RevokedReason, &m.CreatedAt, &m.ValidUntil, &m.UpdatedAt); e != nil {
 				return e
 			}
 			result = append(result, m)
@@ -167,18 +143,18 @@ func (v *Repo) SelectCertBySubject(ctx context.Context, args ...string) ([]Cert,
 	return result, nil
 }
 
-const sqlSelectCertByFingerPrint = `SELECT "id", "owner", "domain", "subject", "fingerprint", "issuer_key_hash", "issuer_name_hash", "revoked", "created_at", "valid_until", "updated_at" FROM "certs" WHERE "fingerprint"=ANY($1);`
+const sqlSelectCertByFingerPrint = `SELECT "id", "owner", "subject", "fingerprint", "issuer_key_hash", "issuer_name_hash", "revoked", "revoked_reason", "created_at", "valid_until", "updated_at" FROM "cert_info" WHERE "fingerprint"=ANY($1);`
 
 func (v *Repo) SelectCertByFingerPrint(ctx context.Context, args ...string) ([]Cert, error) {
 	if len(args) == 0 {
 		return nil, nil
 	}
 	result := make([]Cert, 0, len(args))
-	err := v.Sync().Query(ctx, "certs_read_by_fingerprint", func(q orm.Querier) {
+	err := v.Sync().Query(ctx, "cert_info_read_by_fingerprint", func(q orm.Querier) {
 		q.SQL(sqlSelectCertByFingerPrint, args)
 		q.Bind(func(bind orm.Scanner) error {
 			m := Cert{}
-			if e := bind.Scan(&m.SerialNumber, &m.Owner, &m.Domain, &m.Subject, &m.FingerPrint, &m.IssuerKeyHash, &m.IssuerNameHash, &m.Revoked, &m.CreatedAt, &m.ValidUntil, &m.UpdatedAt); e != nil {
+			if e := bind.Scan(&m.SerialNumber, &m.Owner, &m.Subject, &m.FingerPrint, &m.IssuerKeyHash, &m.IssuerNameHash, &m.Revoked, &m.RevokedReason, &m.CreatedAt, &m.ValidUntil, &m.UpdatedAt); e != nil {
 				return e
 			}
 			result = append(result, m)
@@ -191,18 +167,18 @@ func (v *Repo) SelectCertByFingerPrint(ctx context.Context, args ...string) ([]C
 	return result, nil
 }
 
-const sqlSelectCertByIssuerKeyHash = `SELECT "id", "owner", "domain", "subject", "fingerprint", "issuer_key_hash", "issuer_name_hash", "revoked", "created_at", "valid_until", "updated_at" FROM "certs" WHERE "issuer_key_hash"=ANY($1);`
+const sqlSelectCertByIssuerKeyHash = `SELECT "id", "owner", "subject", "fingerprint", "issuer_key_hash", "issuer_name_hash", "revoked", "revoked_reason", "created_at", "valid_until", "updated_at" FROM "cert_info" WHERE "issuer_key_hash"=ANY($1);`
 
 func (v *Repo) SelectCertByIssuerKeyHash(ctx context.Context, args ...string) ([]Cert, error) {
 	if len(args) == 0 {
 		return nil, nil
 	}
 	result := make([]Cert, 0, len(args))
-	err := v.Sync().Query(ctx, "certs_read_by_issuer_key_hash", func(q orm.Querier) {
+	err := v.Sync().Query(ctx, "cert_info_read_by_issuer_key_hash", func(q orm.Querier) {
 		q.SQL(sqlSelectCertByIssuerKeyHash, args)
 		q.Bind(func(bind orm.Scanner) error {
 			m := Cert{}
-			if e := bind.Scan(&m.SerialNumber, &m.Owner, &m.Domain, &m.Subject, &m.FingerPrint, &m.IssuerKeyHash, &m.IssuerNameHash, &m.Revoked, &m.CreatedAt, &m.ValidUntil, &m.UpdatedAt); e != nil {
+			if e := bind.Scan(&m.SerialNumber, &m.Owner, &m.Subject, &m.FingerPrint, &m.IssuerKeyHash, &m.IssuerNameHash, &m.Revoked, &m.RevokedReason, &m.CreatedAt, &m.ValidUntil, &m.UpdatedAt); e != nil {
 				return e
 			}
 			result = append(result, m)
@@ -215,18 +191,18 @@ func (v *Repo) SelectCertByIssuerKeyHash(ctx context.Context, args ...string) ([
 	return result, nil
 }
 
-const sqlSelectCertByIssuerNameHash = `SELECT "id", "owner", "domain", "subject", "fingerprint", "issuer_key_hash", "issuer_name_hash", "revoked", "created_at", "valid_until", "updated_at" FROM "certs" WHERE "issuer_name_hash"=ANY($1);`
+const sqlSelectCertByIssuerNameHash = `SELECT "id", "owner", "subject", "fingerprint", "issuer_key_hash", "issuer_name_hash", "revoked", "revoked_reason", "created_at", "valid_until", "updated_at" FROM "cert_info" WHERE "issuer_name_hash"=ANY($1);`
 
 func (v *Repo) SelectCertByIssuerNameHash(ctx context.Context, args ...string) ([]Cert, error) {
 	if len(args) == 0 {
 		return nil, nil
 	}
 	result := make([]Cert, 0, len(args))
-	err := v.Sync().Query(ctx, "certs_read_by_issuer_name_hash", func(q orm.Querier) {
+	err := v.Sync().Query(ctx, "cert_info_read_by_issuer_name_hash", func(q orm.Querier) {
 		q.SQL(sqlSelectCertByIssuerNameHash, args)
 		q.Bind(func(bind orm.Scanner) error {
 			m := Cert{}
-			if e := bind.Scan(&m.SerialNumber, &m.Owner, &m.Domain, &m.Subject, &m.FingerPrint, &m.IssuerKeyHash, &m.IssuerNameHash, &m.Revoked, &m.CreatedAt, &m.ValidUntil, &m.UpdatedAt); e != nil {
+			if e := bind.Scan(&m.SerialNumber, &m.Owner, &m.Subject, &m.FingerPrint, &m.IssuerKeyHash, &m.IssuerNameHash, &m.Revoked, &m.RevokedReason, &m.CreatedAt, &m.ValidUntil, &m.UpdatedAt); e != nil {
 				return e
 			}
 			result = append(result, m)
@@ -239,18 +215,18 @@ func (v *Repo) SelectCertByIssuerNameHash(ctx context.Context, args ...string) (
 	return result, nil
 }
 
-const sqlSelectCertByRevoked = `SELECT "id", "owner", "domain", "subject", "fingerprint", "issuer_key_hash", "issuer_name_hash", "revoked", "created_at", "valid_until", "updated_at" FROM "certs" WHERE "revoked"=ANY($1);`
+const sqlSelectCertByRevoked = `SELECT "id", "owner", "subject", "fingerprint", "issuer_key_hash", "issuer_name_hash", "revoked", "revoked_reason", "created_at", "valid_until", "updated_at" FROM "cert_info" WHERE "revoked"=ANY($1);`
 
 func (v *Repo) SelectCertByRevoked(ctx context.Context, args ...bool) ([]Cert, error) {
 	if len(args) == 0 {
 		return nil, nil
 	}
 	result := make([]Cert, 0, len(args))
-	err := v.Sync().Query(ctx, "certs_read_by_revoked", func(q orm.Querier) {
+	err := v.Sync().Query(ctx, "cert_info_read_by_revoked", func(q orm.Querier) {
 		q.SQL(sqlSelectCertByRevoked, args)
 		q.Bind(func(bind orm.Scanner) error {
 			m := Cert{}
-			if e := bind.Scan(&m.SerialNumber, &m.Owner, &m.Domain, &m.Subject, &m.FingerPrint, &m.IssuerKeyHash, &m.IssuerNameHash, &m.Revoked, &m.CreatedAt, &m.ValidUntil, &m.UpdatedAt); e != nil {
+			if e := bind.Scan(&m.SerialNumber, &m.Owner, &m.Subject, &m.FingerPrint, &m.IssuerKeyHash, &m.IssuerNameHash, &m.Revoked, &m.RevokedReason, &m.CreatedAt, &m.ValidUntil, &m.UpdatedAt); e != nil {
 				return e
 			}
 			result = append(result, m)
@@ -263,18 +239,42 @@ func (v *Repo) SelectCertByRevoked(ctx context.Context, args ...bool) ([]Cert, e
 	return result, nil
 }
 
-const sqlSelectCertByCreatedAt = `SELECT "id", "owner", "domain", "subject", "fingerprint", "issuer_key_hash", "issuer_name_hash", "revoked", "created_at", "valid_until", "updated_at" FROM "certs" WHERE "created_at"=ANY($1);`
+const sqlSelectCertByRevokedReason = `SELECT "id", "owner", "subject", "fingerprint", "issuer_key_hash", "issuer_name_hash", "revoked", "revoked_reason", "created_at", "valid_until", "updated_at" FROM "cert_info" WHERE "revoked_reason"=ANY($1);`
+
+func (v *Repo) SelectCertByRevokedReason(ctx context.Context, args ...int64) ([]Cert, error) {
+	if len(args) == 0 {
+		return nil, nil
+	}
+	result := make([]Cert, 0, len(args))
+	err := v.Sync().Query(ctx, "cert_info_read_by_revoked_reason", func(q orm.Querier) {
+		q.SQL(sqlSelectCertByRevokedReason, args)
+		q.Bind(func(bind orm.Scanner) error {
+			m := Cert{}
+			if e := bind.Scan(&m.SerialNumber, &m.Owner, &m.Subject, &m.FingerPrint, &m.IssuerKeyHash, &m.IssuerNameHash, &m.Revoked, &m.RevokedReason, &m.CreatedAt, &m.ValidUntil, &m.UpdatedAt); e != nil {
+				return e
+			}
+			result = append(result, m)
+			return nil
+		})
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+const sqlSelectCertByCreatedAt = `SELECT "id", "owner", "subject", "fingerprint", "issuer_key_hash", "issuer_name_hash", "revoked", "revoked_reason", "created_at", "valid_until", "updated_at" FROM "cert_info" WHERE "created_at"=ANY($1);`
 
 func (v *Repo) SelectCertByCreatedAt(ctx context.Context, args ...time.Time) ([]Cert, error) {
 	if len(args) == 0 {
 		return nil, nil
 	}
 	result := make([]Cert, 0, len(args))
-	err := v.Sync().Query(ctx, "certs_read_by_created_at", func(q orm.Querier) {
+	err := v.Sync().Query(ctx, "cert_info_read_by_created_at", func(q orm.Querier) {
 		q.SQL(sqlSelectCertByCreatedAt, args)
 		q.Bind(func(bind orm.Scanner) error {
 			m := Cert{}
-			if e := bind.Scan(&m.SerialNumber, &m.Owner, &m.Domain, &m.Subject, &m.FingerPrint, &m.IssuerKeyHash, &m.IssuerNameHash, &m.Revoked, &m.CreatedAt, &m.ValidUntil, &m.UpdatedAt); e != nil {
+			if e := bind.Scan(&m.SerialNumber, &m.Owner, &m.Subject, &m.FingerPrint, &m.IssuerKeyHash, &m.IssuerNameHash, &m.Revoked, &m.RevokedReason, &m.CreatedAt, &m.ValidUntil, &m.UpdatedAt); e != nil {
 				return e
 			}
 			result = append(result, m)
@@ -287,18 +287,18 @@ func (v *Repo) SelectCertByCreatedAt(ctx context.Context, args ...time.Time) ([]
 	return result, nil
 }
 
-const sqlSelectCertByValidUntil = `SELECT "id", "owner", "domain", "subject", "fingerprint", "issuer_key_hash", "issuer_name_hash", "revoked", "created_at", "valid_until", "updated_at" FROM "certs" WHERE "valid_until"=ANY($1);`
+const sqlSelectCertByValidUntil = `SELECT "id", "owner", "subject", "fingerprint", "issuer_key_hash", "issuer_name_hash", "revoked", "revoked_reason", "created_at", "valid_until", "updated_at" FROM "cert_info" WHERE "valid_until"=ANY($1);`
 
 func (v *Repo) SelectCertByValidUntil(ctx context.Context, args ...time.Time) ([]Cert, error) {
 	if len(args) == 0 {
 		return nil, nil
 	}
 	result := make([]Cert, 0, len(args))
-	err := v.Sync().Query(ctx, "certs_read_by_valid_until", func(q orm.Querier) {
+	err := v.Sync().Query(ctx, "cert_info_read_by_valid_until", func(q orm.Querier) {
 		q.SQL(sqlSelectCertByValidUntil, args)
 		q.Bind(func(bind orm.Scanner) error {
 			m := Cert{}
-			if e := bind.Scan(&m.SerialNumber, &m.Owner, &m.Domain, &m.Subject, &m.FingerPrint, &m.IssuerKeyHash, &m.IssuerNameHash, &m.Revoked, &m.CreatedAt, &m.ValidUntil, &m.UpdatedAt); e != nil {
+			if e := bind.Scan(&m.SerialNumber, &m.Owner, &m.Subject, &m.FingerPrint, &m.IssuerKeyHash, &m.IssuerNameHash, &m.Revoked, &m.RevokedReason, &m.CreatedAt, &m.ValidUntil, &m.UpdatedAt); e != nil {
 				return e
 			}
 			result = append(result, m)
@@ -311,18 +311,18 @@ func (v *Repo) SelectCertByValidUntil(ctx context.Context, args ...time.Time) ([
 	return result, nil
 }
 
-const sqlSelectCertByUpdatedAt = `SELECT "id", "owner", "domain", "subject", "fingerprint", "issuer_key_hash", "issuer_name_hash", "revoked", "created_at", "valid_until", "updated_at" FROM "certs" WHERE "updated_at"=ANY($1);`
+const sqlSelectCertByUpdatedAt = `SELECT "id", "owner", "subject", "fingerprint", "issuer_key_hash", "issuer_name_hash", "revoked", "revoked_reason", "created_at", "valid_until", "updated_at" FROM "cert_info" WHERE "updated_at"=ANY($1);`
 
 func (v *Repo) SelectCertByUpdatedAt(ctx context.Context, args ...time.Time) ([]Cert, error) {
 	if len(args) == 0 {
 		return nil, nil
 	}
 	result := make([]Cert, 0, len(args))
-	err := v.Sync().Query(ctx, "certs_read_by_updated_at", func(q orm.Querier) {
+	err := v.Sync().Query(ctx, "cert_info_read_by_updated_at", func(q orm.Querier) {
 		q.SQL(sqlSelectCertByUpdatedAt, args)
 		q.Bind(func(bind orm.Scanner) error {
 			m := Cert{}
-			if e := bind.Scan(&m.SerialNumber, &m.Owner, &m.Domain, &m.Subject, &m.FingerPrint, &m.IssuerKeyHash, &m.IssuerNameHash, &m.Revoked, &m.CreatedAt, &m.ValidUntil, &m.UpdatedAt); e != nil {
+			if e := bind.Scan(&m.SerialNumber, &m.Owner, &m.Subject, &m.FingerPrint, &m.IssuerKeyHash, &m.IssuerNameHash, &m.Revoked, &m.RevokedReason, &m.CreatedAt, &m.ValidUntil, &m.UpdatedAt); e != nil {
 				return e
 			}
 			result = append(result, m)
@@ -335,7 +335,7 @@ func (v *Repo) SelectCertByUpdatedAt(ctx context.Context, args ...time.Time) ([]
 	return result, nil
 }
 
-const sqlUpdateCertBySerialNumber = `UPDATE "certs" SET "created_at"=$8, "domain"=$2, "fingerprint"=$4, "issuer_key_hash"=$5, "issuer_name_hash"=$6, "owner"=$1, "revoked"=$7, "subject"=$3, "updated_at"=$10, "valid_until"=$9 WHERE "id"=$11;`
+const sqlUpdateCertBySerialNumber = `UPDATE "cert_info" SET "created_at"=$8, "fingerprint"=$3, "issuer_key_hash"=$4, "issuer_name_hash"=$5, "owner"=$1, "revoked"=$6, "revoked_reason"=$7, "subject"=$2, "updated_at"=$10, "valid_until"=$9 WHERE "id"=$11;`
 
 func (v *Repo) UpdateCertBySerialNumber(ctx context.Context, ms ...*Cert) error {
 	if len(ms) == 0 {
@@ -345,157 +345,157 @@ func (v *Repo) UpdateCertBySerialNumber(ctx context.Context, ms ...*Cert) error 
 		m.UpdatedAt = time.Now()
 	}
 	if len(ms) == 1 {
-		return v.Master().Exec(ctx, "certs_update_by_id", func(e orm.Executor) {
-			e.SQL(sqlUpdateCertBySerialNumber, ms[0].Owner, ms[0].Domain, ms[0].Subject, ms[0].FingerPrint, ms[0].IssuerKeyHash, ms[0].IssuerNameHash, ms[0].Revoked, ms[0].CreatedAt, ms[0].ValidUntil, ms[0].UpdatedAt, ms[0].SerialNumber)
+		return v.Master().Exec(ctx, "cert_info_update_by_id", func(e orm.Executor) {
+			e.SQL(sqlUpdateCertBySerialNumber, ms[0].Owner, ms[0].Subject, ms[0].FingerPrint, ms[0].IssuerKeyHash, ms[0].IssuerNameHash, ms[0].Revoked, ms[0].RevokedReason, ms[0].CreatedAt, ms[0].ValidUntil, ms[0].UpdatedAt, ms[0].SerialNumber)
 		})
 	}
-	return v.Master().Tx(ctx, "certs_update_bulk_by_id", func(tx orm.Tx) {
+	return v.Master().Tx(ctx, "cert_info_update_bulk_by_id", func(tx orm.Tx) {
 		tx.Exec(func(e orm.Executor) {
 			e.SQL(sqlUpdateCertBySerialNumber)
 			for _, m := range ms {
-				e.Params(m.Owner, m.Domain, m.Subject, m.FingerPrint, m.IssuerKeyHash, m.IssuerNameHash, m.Revoked, m.CreatedAt, m.ValidUntil, m.UpdatedAt, m.SerialNumber)
+				e.Params(m.Owner, m.Subject, m.FingerPrint, m.IssuerKeyHash, m.IssuerNameHash, m.Revoked, m.RevokedReason, m.CreatedAt, m.ValidUntil, m.UpdatedAt, m.SerialNumber)
 			}
 		})
 	})
 }
 
-const sqlDeleteCertBySerialNumber = `DELETE FROM "certs" WHERE "id"=ANY($1);`
+const sqlDeleteCertBySerialNumber = `DELETE FROM "cert_info" WHERE "id"=ANY($1);`
 
 func (v *Repo) DeleteCertBySerialNumber(ctx context.Context, ms ...int64) error {
 	if len(ms) == 0 {
 		return nil
 	}
-	return v.Master().Tx(ctx, "certs_delete_by_id", func(tx orm.Tx) {
+	return v.Master().Tx(ctx, "cert_info_delete_by_id", func(tx orm.Tx) {
 		tx.Exec(func(e orm.Executor) {
 			e.SQL(sqlDeleteCertBySerialNumber, ms)
 		})
 	})
 }
 
-const sqlDeleteCertByOwner = `DELETE FROM "certs" WHERE "owner"=ANY($1);`
+const sqlDeleteCertByOwner = `DELETE FROM "cert_info" WHERE "owner"=ANY($1);`
 
 func (v *Repo) DeleteCertByOwner(ctx context.Context, ms ...int64) error {
 	if len(ms) == 0 {
 		return nil
 	}
-	return v.Master().Tx(ctx, "certs_delete_by_owner", func(tx orm.Tx) {
+	return v.Master().Tx(ctx, "cert_info_delete_by_owner", func(tx orm.Tx) {
 		tx.Exec(func(e orm.Executor) {
 			e.SQL(sqlDeleteCertByOwner, ms)
 		})
 	})
 }
 
-const sqlDeleteCertByDomain = `DELETE FROM "certs" WHERE "domain"=ANY($1);`
-
-func (v *Repo) DeleteCertByDomain(ctx context.Context, ms ...string) error {
-	if len(ms) == 0 {
-		return nil
-	}
-	return v.Master().Tx(ctx, "certs_delete_by_domain", func(tx orm.Tx) {
-		tx.Exec(func(e orm.Executor) {
-			e.SQL(sqlDeleteCertByDomain, ms)
-		})
-	})
-}
-
-const sqlDeleteCertBySubject = `DELETE FROM "certs" WHERE "subject"=ANY($1);`
+const sqlDeleteCertBySubject = `DELETE FROM "cert_info" WHERE "subject"=ANY($1);`
 
 func (v *Repo) DeleteCertBySubject(ctx context.Context, ms ...string) error {
 	if len(ms) == 0 {
 		return nil
 	}
-	return v.Master().Tx(ctx, "certs_delete_by_subject", func(tx orm.Tx) {
+	return v.Master().Tx(ctx, "cert_info_delete_by_subject", func(tx orm.Tx) {
 		tx.Exec(func(e orm.Executor) {
 			e.SQL(sqlDeleteCertBySubject, ms)
 		})
 	})
 }
 
-const sqlDeleteCertByFingerPrint = `DELETE FROM "certs" WHERE "fingerprint"=ANY($1);`
+const sqlDeleteCertByFingerPrint = `DELETE FROM "cert_info" WHERE "fingerprint"=ANY($1);`
 
 func (v *Repo) DeleteCertByFingerPrint(ctx context.Context, ms ...string) error {
 	if len(ms) == 0 {
 		return nil
 	}
-	return v.Master().Tx(ctx, "certs_delete_by_fingerprint", func(tx orm.Tx) {
+	return v.Master().Tx(ctx, "cert_info_delete_by_fingerprint", func(tx orm.Tx) {
 		tx.Exec(func(e orm.Executor) {
 			e.SQL(sqlDeleteCertByFingerPrint, ms)
 		})
 	})
 }
 
-const sqlDeleteCertByIssuerKeyHash = `DELETE FROM "certs" WHERE "issuer_key_hash"=ANY($1);`
+const sqlDeleteCertByIssuerKeyHash = `DELETE FROM "cert_info" WHERE "issuer_key_hash"=ANY($1);`
 
 func (v *Repo) DeleteCertByIssuerKeyHash(ctx context.Context, ms ...string) error {
 	if len(ms) == 0 {
 		return nil
 	}
-	return v.Master().Tx(ctx, "certs_delete_by_issuer_key_hash", func(tx orm.Tx) {
+	return v.Master().Tx(ctx, "cert_info_delete_by_issuer_key_hash", func(tx orm.Tx) {
 		tx.Exec(func(e orm.Executor) {
 			e.SQL(sqlDeleteCertByIssuerKeyHash, ms)
 		})
 	})
 }
 
-const sqlDeleteCertByIssuerNameHash = `DELETE FROM "certs" WHERE "issuer_name_hash"=ANY($1);`
+const sqlDeleteCertByIssuerNameHash = `DELETE FROM "cert_info" WHERE "issuer_name_hash"=ANY($1);`
 
 func (v *Repo) DeleteCertByIssuerNameHash(ctx context.Context, ms ...string) error {
 	if len(ms) == 0 {
 		return nil
 	}
-	return v.Master().Tx(ctx, "certs_delete_by_issuer_name_hash", func(tx orm.Tx) {
+	return v.Master().Tx(ctx, "cert_info_delete_by_issuer_name_hash", func(tx orm.Tx) {
 		tx.Exec(func(e orm.Executor) {
 			e.SQL(sqlDeleteCertByIssuerNameHash, ms)
 		})
 	})
 }
 
-const sqlDeleteCertByRevoked = `DELETE FROM "certs" WHERE "revoked"=ANY($1);`
+const sqlDeleteCertByRevoked = `DELETE FROM "cert_info" WHERE "revoked"=ANY($1);`
 
 func (v *Repo) DeleteCertByRevoked(ctx context.Context, ms ...bool) error {
 	if len(ms) == 0 {
 		return nil
 	}
-	return v.Master().Tx(ctx, "certs_delete_by_revoked", func(tx orm.Tx) {
+	return v.Master().Tx(ctx, "cert_info_delete_by_revoked", func(tx orm.Tx) {
 		tx.Exec(func(e orm.Executor) {
 			e.SQL(sqlDeleteCertByRevoked, ms)
 		})
 	})
 }
 
-const sqlDeleteCertByCreatedAt = `DELETE FROM "certs" WHERE "created_at"=ANY($1);`
+const sqlDeleteCertByRevokedReason = `DELETE FROM "cert_info" WHERE "revoked_reason"=ANY($1);`
+
+func (v *Repo) DeleteCertByRevokedReason(ctx context.Context, ms ...int64) error {
+	if len(ms) == 0 {
+		return nil
+	}
+	return v.Master().Tx(ctx, "cert_info_delete_by_revoked_reason", func(tx orm.Tx) {
+		tx.Exec(func(e orm.Executor) {
+			e.SQL(sqlDeleteCertByRevokedReason, ms)
+		})
+	})
+}
+
+const sqlDeleteCertByCreatedAt = `DELETE FROM "cert_info" WHERE "created_at"=ANY($1);`
 
 func (v *Repo) DeleteCertByCreatedAt(ctx context.Context, ms ...time.Time) error {
 	if len(ms) == 0 {
 		return nil
 	}
-	return v.Master().Tx(ctx, "certs_delete_by_created_at", func(tx orm.Tx) {
+	return v.Master().Tx(ctx, "cert_info_delete_by_created_at", func(tx orm.Tx) {
 		tx.Exec(func(e orm.Executor) {
 			e.SQL(sqlDeleteCertByCreatedAt, ms)
 		})
 	})
 }
 
-const sqlDeleteCertByValidUntil = `DELETE FROM "certs" WHERE "valid_until"=ANY($1);`
+const sqlDeleteCertByValidUntil = `DELETE FROM "cert_info" WHERE "valid_until"=ANY($1);`
 
 func (v *Repo) DeleteCertByValidUntil(ctx context.Context, ms ...time.Time) error {
 	if len(ms) == 0 {
 		return nil
 	}
-	return v.Master().Tx(ctx, "certs_delete_by_valid_until", func(tx orm.Tx) {
+	return v.Master().Tx(ctx, "cert_info_delete_by_valid_until", func(tx orm.Tx) {
 		tx.Exec(func(e orm.Executor) {
 			e.SQL(sqlDeleteCertByValidUntil, ms)
 		})
 	})
 }
 
-const sqlDeleteCertByUpdatedAt = `DELETE FROM "certs" WHERE "updated_at"=ANY($1);`
+const sqlDeleteCertByUpdatedAt = `DELETE FROM "cert_info" WHERE "updated_at"=ANY($1);`
 
 func (v *Repo) DeleteCertByUpdatedAt(ctx context.Context, ms ...time.Time) error {
 	if len(ms) == 0 {
 		return nil
 	}
-	return v.Master().Tx(ctx, "certs_delete_by_updated_at", func(tx orm.Tx) {
+	return v.Master().Tx(ctx, "cert_info_delete_by_updated_at", func(tx orm.Tx) {
 		tx.Exec(func(e orm.Executor) {
 			e.SQL(sqlDeleteCertByUpdatedAt, ms)
 		})
