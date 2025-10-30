@@ -28,7 +28,7 @@ pgsql:
 db_migrate:
     - tags: master
       dialect: pgsql
-      dir: ./migrations
+      dir: /var/lib/casper-server/migrations
 
 certs:
     - ca_cert: "/var/lib/casper-server/intermediate.crt"
