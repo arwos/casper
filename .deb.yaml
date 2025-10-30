@@ -25,7 +25,7 @@ packages:
         prerm: scripts/prerm.sh
         postrm: scripts/postrm.sh
       data:
-        bin/casper-server: build/bin/casper-server_%arch%
+        bin/casper-server: build/casper-server_%arch%
         etc/casper/config.yaml: config/config.yaml
 
     - package: casper-cli
@@ -45,4 +45,4 @@ packages:
           - ca-certificates
         build: goppy build --arch=%arch%
       data:
-        bin/casper-cli: build/bin/casper-cli_%arch%
+        bin/casper-cli: build/casper-cli_%arch%
