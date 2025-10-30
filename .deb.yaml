@@ -26,6 +26,7 @@ packages:
         postrm: scripts/postrm.sh
       data:
         bin/casper-server: build/casper-server_%arch%
+        etc/systemd/system/casper.service: init/casper-server.service
         etc/casper/config.yaml: config/config.yaml
 
     - package: casper-cli
