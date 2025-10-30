@@ -56,3 +56,4 @@ fi
 mkdir -p /var/lib/casper-server
 chown $USERNAME:$GROUPNAME -R /var/lib/casper-server
 chmod 600 -R /var/lib/casper-server
+chmod 700 /var/lib/casper-server

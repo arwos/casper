@@ -8,27 +8,10 @@ Type=simple
 
 User=casper
 Group=casper
-DynamicUser=yes
 
-NoNewPrivileges=yes
-PrivateTmp=yes
-PrivateDevices=yes
-PrivateUsers=yes
+ProtectSystem=full
 ProtectHome=yes
-ProtectSystem=strict
-ProtectKernelTunables=yes
-ProtectKernelModules=yes
-ProtectControlGroups=yes
-ProtectKernelLogs=yes
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
-RestrictNamespaces=yes
-RestrictRealtime=yes
-RestrictSUIDSGID=yes
-LockPersonality=yes
-MemoryDenyWriteExecute=yes
-RemoveIPC=yes
-
-WorkingDirectory=/var/lib/casper-server
+PrivateTmp=true
 
 Restart=on-failure
 RestartSec=30s

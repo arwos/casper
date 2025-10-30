@@ -28,6 +28,7 @@ packages:
         bin/casper-server: build/casper-server_%arch%
         etc/systemd/system/casper.service: init/casper-server.service
         etc/casper/config.yaml: config/config.yaml
+        var/lib/casper-server/init_example.sh: scripts/init_example.sh
         var/lib/casper-server/migrations: "d:migrations"
 
     - package: casper-cli
