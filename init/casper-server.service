@@ -1,15 +1,41 @@
 [Unit]
+Description=Certificate Management Server
+Documentation=https://casper.osspkg.com/
 After=network.target
 
 [Service]
-User=root
-Group=root
+Type=simple
+
+User=casper
+Group=casper
+DynamicUser=yes
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+PrivateUsers=yes
+ProtectHome=yes
+ProtectSystem=full
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectKernelLogs=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RemoveIPC=yes
+
+WorkingDirectory=/var/lib/casper-server
+
 Restart=on-failure
 RestartSec=30s
-Type=simple
+ExecStartPre=/usr/bin/chmod 600 -R /var/lib/casper-server/*.key
 ExecStart=/usr/bin/casper-server --config=/etc/casper-server/config.yaml
 KillMode=process
 KillSignal=SIGTERM
 
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target

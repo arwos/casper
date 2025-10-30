@@ -1,0 +1,44 @@
+env: dev
+log:
+  format: syslog
+  level: 4
+
+http:
+    - tag: main
+      addr: 127.0.0.2:20000
+    - tag: pki
+      addr: 127.0.0.3:20000
+
+pgsql:
+    - tags: master,slave
+      host: 127.0.0.1
+      port: 5432
+      schema: postgres
+      user: postgres
+      password: postgres
+      sslmode: false
+      app_name: casper_app
+      charset: UTF8
+      maxidleconn: 5
+      maxopenconn: 5
+      maxconnttl: 50s
+      timeout: 5s
+      other_params: ""
+
+db_migrate:
+    - tags: master
+      dialect: pgsql
+      dir: ./migrations
+
+certs:
+    - ca_cert: "/var/lib/casper-server/intermediate.crt"
+      ca_key: "/var/lib/casper-server/intermediate.key"
+      root_cert: "/var/lib/casper-server/root.crt"
+      domains:
+        - domain1
+        - domain2
+      default_expire_days: 90
+      issuing_certificate_urls:
+        - http://pki.domain/icu/root-l1.crt
+
+
