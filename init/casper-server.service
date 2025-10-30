@@ -15,7 +15,7 @@ PrivateTmp=yes
 PrivateDevices=yes
 PrivateUsers=yes
 ProtectHome=yes
-ProtectSystem=full
+ProtectSystem=strict
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectControlGroups=yes
@@ -32,8 +32,7 @@ WorkingDirectory=/var/lib/casper-server
 
 Restart=on-failure
 RestartSec=30s
-ExecStartPre=/usr/bin/chmod 600 -R /var/lib/casper-server/*.key
-ExecStart=/usr/bin/casper-server --config=/etc/casper-server/config.yaml
+ExecStart=/usr/bin/casper-server --config=/etc/casper/config.yaml
 KillMode=process
 KillSignal=SIGTERM
 

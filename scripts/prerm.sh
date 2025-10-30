@@ -1,7 +1,7 @@
 #!/bin/bash
 
-if [ -f "/etc/systemd/system/casper-server.service" ]; then
-    systemctl stop casper-server
-    systemctl disable casper-server
+if [ -f "/etc/systemd/system/casper.service" ]; then
+    systemctl stop casper
+    systemctl disable casper
     systemctl daemon-reload
 fi

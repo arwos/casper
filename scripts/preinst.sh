@@ -9,6 +9,14 @@ log_message() {
 
 #-----------------------------------------------------------------
 
+if [ -f "/etc/systemd/system/casper.service" ]; then
+    systemctl stop casper
+    systemctl disable casper
+    systemctl daemon-reload
+fi
+
+#-----------------------------------------------------------------
+
 if getent group "$GROUPNAME" > /dev/null 2>&1; then
     log_message "Group $GROUPNAME exist"
 else
@@ -45,16 +53,6 @@ fi
 
 #-----------------------------------------------------------------
 
-if ! [ -d /var/lib/casper-server/ ]; then
-    mkdir /var/lib/casper-server
-    chown $USERNAME:$GROUPNAME -R /var/lib/casper-server
-    chmod 640 -R /var/lib/casper-server
-fi
-
-#-----------------------------------------------------------------
-
-if [ -f "/etc/systemd/system/casper-server.service" ]; then
-    systemctl stop casper-server
-    systemctl disable casper-server
-    systemctl daemon-reload
-fi
+mkdir -p /var/lib/casper-server
+chown $USERNAME:$GROUPNAME -R /var/lib/casper-server
+chmod 600 -R /var/lib/casper-server
