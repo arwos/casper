@@ -15,6 +15,7 @@ do_configure(){
   chown $USERNAME:$GROUPNAME -R /var/lib/casper
   chmod 600 -R /var/lib/casper
   chmod 700 /var/lib/casper
+  chmod 700 /var/lib/casper/migrations
 }
 
 case "$1" in

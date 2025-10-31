@@ -8,6 +8,9 @@ do_configure(){
 		systemctl enable casper-cli
 		systemctl daemon-reload
 	fi
+
+	mkdir -p /etc/ssl/casper
+	chmod 744 /etc/ssl/casper
 }
 
 case "$1" in
