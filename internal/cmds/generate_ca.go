@@ -7,6 +7,7 @@ package cmds
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -31,13 +32,17 @@ func GenerateCA() console.CommandGetter {
 			f.StringVar("email", "", "Casper PKI Email Address")
 			f.IntVar("deadline", 10*365, "Validity period (in days)")
 			f.StringVar("output", fs.CurrentDir(), "Path for save certs")
+			f.StringVar("filename", "cert", "Filename for save certs")
 			f.StringVar("ca-cert", "", "Path for CA certificate for signing")
 			f.StringVar("ca-key", "", "Path for CA key for signing")
 		})
 		setter.ExecFunc(func(_ []string,
-			_cn, _org, _country, _ocsp, _cps, _icu, _crl, _alg, _email string, _deadline int64, _output string,
+			_cn, _org, _country, _ocsp, _cps, _icu, _crl, _alg, _email string, _deadline int64,
+			_output, _filename string,
 			_caCertPath, _caKeyPath string,
 		) {
+			console.FatalIfErr(os.MkdirAll(_output, 0600), "Could not create output directory")
+
 			alg, ok := _algorithms[_alg]
 			if !ok {
 				console.Fatalf("unknown algorithm: %s, can use %s", _alg, strings.Join(do.Keys(_algorithms), ", "))
@@ -77,13 +82,15 @@ func GenerateCA() console.CommandGetter {
 			}
 			console.FatalIfErr(err, "failed to create CA")
 
-			certName := strings.ToLower(strings.ReplaceAll(_cn, " ", "_"))
+			certName := strings.ToLower(strings.TrimSpace(_filename))
 			console.FatalIfErr(
 				cert.SaveCert(fmt.Sprintf("%s/%s.crt", _output, certName)),
 				"failed save CA certificate")
 			console.FatalIfErr(
 				cert.SaveKey(fmt.Sprintf("%s/%s.key", _output, certName)),
 				"failed save CA private key")
+
+			console.FatalIfErr(setLinuxAccess(_output, certName), "failed set linux access")
 		})
 	})
 }

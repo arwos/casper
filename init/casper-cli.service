@@ -1,0 +1,19 @@
+[Unit]
+Description=Client for Casper Certificate Management Server
+Documentation=https://casper.osspkg.com/
+After=network.target
+
+[Service]
+Type=simple
+
+User=root
+Group=ssl-cert
+
+Restart=on-failure
+RestartSec=30s
+ExecStart=/usr/bin/casper-cli auto --config=/etc/casper/client.yaml
+KillMode=process
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=default.target

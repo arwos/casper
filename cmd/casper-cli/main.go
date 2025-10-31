@@ -15,5 +15,6 @@ func main() {
 	cli := console.New("casper-cli", "Casper Certificate Management Client")
 	cli.AddCommand(cmds.GenerateCA())
 	cli.AddCommand(cmds.RenewalCert())
+	cli.AddCommand(cmds.RenewalCertAuto())
 	cli.Exec()
 }

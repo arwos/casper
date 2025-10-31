@@ -1,7 +1,7 @@
 env: dev
 log:
   format: syslog
-  level: 4
+  level: 3
 
 http:
     - tag: main

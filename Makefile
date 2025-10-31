@@ -3,7 +3,7 @@ SHELL=/bin/bash
 
 .PHONY: install
 install:
-	go install go.osspkg.com/goppy/v2/cmd/goppy@v2.4.5
+	go install go.osspkg.com/goppy/v2/cmd/goppy@latest
 	goppy setup-lib
 
 .PHONY: lint
@@ -76,3 +76,6 @@ run_client_ocsp:
 
 run_server:
 	go run -race cmd/casper-server/main.go --config=config/config.dev.yaml
+
+deb:
+	deb-builder build --base-dir=./build --tmp-dir=/tmp/deb-build-casper --no-revision

@@ -1,15 +1,15 @@
 ver: "2"
 packages:
-    - package: casper
-      source: casper
+    - package: casper-server
+      source: casper-server
       version: git
       architecture:
         - amd64
-        - arm64
+#        - arm64
       maintainer: The OSSPkg Team <github@osspkg.com>
       homepage: https://casper.osspkg.com/
       description:
-        - Certificate Management Server
+        - Casper Certificate Management Server
       section: utils
       priority: optional
       control:
@@ -17,35 +17,44 @@ packages:
             - systemd
             - ca-certificates
             - casper-cli
-        build: goppy build --arch=%arch%
+        build: goppy build --arch=%arch% --mode=app --main=casper-server
         conffiles:
-            - /etc/casper/config.yaml
-        preinst: scripts/preinst.sh
-        postinst: scripts/postinst.sh
-        prerm: scripts/prerm.sh
-        postrm: scripts/postrm.sh
+            - /etc/casper/server.yaml
+        preinst: scripts/casper-server_preinst.sh
+        postinst: scripts/casper-server_postinst.sh
+        prerm: scripts/casper-server_prerm.sh
+        postrm: scripts/casper-server_postrm.sh
       data:
         bin/casper-server: build/casper-server_%arch%
-        etc/systemd/system/casper.service: init/casper-server.service
-        etc/casper/config.yaml: config/config.yaml
-        var/lib/casper-server/init_example.sh: scripts/init_example.sh
-        var/lib/casper-server/migrations: "d:migrations"
+        etc/systemd/system/casper-server.service: init/casper-server.service
+        etc/casper/server.yaml: config/server.yaml
+        var/lib/casper/generate.sh: scripts/generate.sh
+        var/lib/casper/migrations: "d:migrations"
 
     - package: casper-cli
       source: casper-cli
       version: git
       architecture:
         - amd64
-        - arm64
+#        - arm64
       maintainer: The OSSPkg Team <github@osspkg.com>
       homepage: https://casper.osspkg.com/
       description:
-        - Client for Certificate Management Server
+        - Client for Casper Certificate Management Server
       section: utils
       priority: optional
       control:
         depends:
+          - systemd
           - ca-certificates
-        build: goppy build --arch=%arch%
+        build: goppy build --arch=%arch% --mode=app --main=casper-cli
+        conffiles:
+          - /etc/casper/client.yaml
+        preinst: scripts/casper-cli_preinst.sh
+        postinst: scripts/casper-cli_postinst.sh
+        prerm: scripts/casper-cli_prerm.sh
+        postrm: scripts/casper-cli_postrm.sh
       data:
         bin/casper-cli: build/casper-cli_%arch%
+        etc/systemd/system/casper-cli.service: init/casper-cli.service
+        etc/casper/client.yaml: config/client.yaml

@@ -1,5 +1,5 @@
 [Unit]
-Description=Certificate Management Server
+Description=Casper Certificate Management Server
 Documentation=https://casper.osspkg.com/
 After=network.target
 
@@ -15,7 +15,7 @@ PrivateTmp=true
 
 Restart=on-failure
 RestartSec=30s
-ExecStart=/usr/bin/casper-server --config=/etc/casper/config.yaml
+ExecStart=/usr/bin/casper-server --config=/etc/casper/server.yaml
 KillMode=process
 KillSignal=SIGTERM
 

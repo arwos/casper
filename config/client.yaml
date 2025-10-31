@@ -1,0 +1,11 @@
+api_address: https://api-domain
+interval: 12h
+algorithm: ecdsa256
+store_path: /etc/ssl/casper
+auth_id: 00000000-0000-0000-0000-000000000000
+auth_token: XXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+requests:
+  - filename: cert1
+    domains:
+      - localhost
+      - local.host
