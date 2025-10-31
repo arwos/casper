@@ -5,7 +5,7 @@ packages:
       version: git
       architecture:
         - amd64
-#        - arm64
+        - arm64
       maintainer: The OSSPkg Team <github@osspkg.com>
       homepage: https://casper.osspkg.com/
       description:
@@ -36,7 +36,7 @@ packages:
       version: git
       architecture:
         - amd64
-#        - arm64
+        - arm64
       maintainer: The OSSPkg Team <github@osspkg.com>
       homepage: https://casper.osspkg.com/
       description:
