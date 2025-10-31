@@ -41,7 +41,7 @@ func setLinuxAccess(dir, filename string) (err error) {
 	}
 	if file := fmt.Sprintf("%s/%s.key", dir, filename); fs.FileExist(file) {
 		err = errors.Wrap(err,
-			errors.Wrapf(os.Chmod(file, 0600), "failed to chmod private key"),
+			errors.Wrapf(os.Chmod(file, 0640), "failed to chmod private key"),
 			errors.Wrapf(os.Chown(file, 0, int(sslCertGroup.Load())), "failed to chown private key"),
 		)
 	}
