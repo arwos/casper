@@ -2,7 +2,7 @@
 set -e
 
 do_purge(){
-	rm -rf /var/lib/casper-server
+	rm -rf /var/lib/casper
 }
 
 case "$1" in

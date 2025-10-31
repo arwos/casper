@@ -11,10 +11,10 @@ do_configure(){
 		systemctl daemon-reload
 	fi
 
-	mkdir -p /var/lib/casper-server
-  chown $USERNAME:$GROUPNAME -R /var/lib/casper-server
-  chmod 600 -R /var/lib/casper-server
-  chmod 700 /var/lib/casper-server
+	mkdir -p /var/lib/casper
+  chown $USERNAME:$GROUPNAME -R /var/lib/casper
+  chmod 600 -R /var/lib/casper
+  chmod 700 /var/lib/casper
 }
 
 case "$1" in

@@ -28,12 +28,12 @@ pgsql:
 db_migrate:
     - tags: master
       dialect: pgsql
-      dir: /var/lib/casper-server/migrations
+      dir: /var/lib/casper/migrations
 
 certs:
-    - ca_cert: "/var/lib/casper-server/intermediate.crt"
-      ca_key: "/var/lib/casper-server/intermediate.key"
-      root_cert: "/var/lib/casper-server/root.crt"
+    - ca_cert: "/var/lib/casper/intermediate.crt"
+      ca_key: "/var/lib/casper/intermediate.key"
+      root_cert: "/var/lib/casper/root.crt"
       domains:
         - domain1
         - domain2
