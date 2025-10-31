@@ -24,13 +24,6 @@ import (
 	"go.arwos.org/casper/client"
 )
 
-func errWrap(err error, domain string) {
-	if err == nil {
-		return
-	}
-	fmt.Println("[ERROR]", err.Error(), "(domains: ", domain, ")")
-}
-
 func RenewalCert() console.CommandGetter {
 	return console.NewCommand(func(setter console.CommandSetter) {
 		setter.Setup("renewal", "renewal certificate")
