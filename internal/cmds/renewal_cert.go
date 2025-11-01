@@ -176,15 +176,15 @@ func renewalCertificate(
 
 		buf := bytes.NewBuffer(nil)
 
-		b, err := pki.MarshalCrtPEM(*caCert.Crt)
+		b, err := pki.MarshalCrtPEM(*newCert.Crt)
 		if err != nil {
-			return errors.Wrapf(err, "failed to encode CA Cert PEM")
+			return errors.Wrapf(err, "failed to encode Cert PEM")
 		}
 		buf.Write(b)
 
-		b, err = pki.MarshalCrtPEM(*newCert.Crt)
+		b, err = pki.MarshalCrtPEM(*caCert.Crt)
 		if err != nil {
-			return errors.Wrapf(err, "failed to encode Cert PEM")
+			return errors.Wrapf(err, "failed to encode CA Cert PEM")
 		}
 		buf.Write(b)
 
