@@ -6,8 +6,10 @@
 package cmds
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -169,17 +171,24 @@ func renewalCertificate(
 	{
 		certName := strings.ToLower(strings.TrimSpace(_filename))
 
-		caFileName := fmt.Sprintf("%s/%s.chain.crt", _output, certName)
 		certFileName := fmt.Sprintf("%s/%s.crt", _output, certName)
 		keyFileName := fmt.Sprintf("%s/%s.key", _output, certName)
 
-		if err = caCert.SaveCert(caFileName); err != nil {
-			return errors.Wrapf(err, "failed to save CA certificate '%s'", caFileName)
+		buf := bytes.NewBuffer(nil)
+
+		b, err := pki.MarshalCrtPEM(*caCert.Crt)
+		if err != nil {
+			return errors.Wrapf(err, "failed to encode CA Cert PEM")
 		}
-		if err = setLinuxAccess(_output, certName+".chain"); err != nil {
-			return err
+		buf.Write(b)
+
+		b, err = pki.MarshalCrtPEM(*newCert.Crt)
+		if err != nil {
+			return errors.Wrapf(err, "failed to encode Cert PEM")
 		}
-		if err = newCert.SaveCert(certFileName); err != nil {
+		buf.Write(b)
+
+		if err = os.WriteFile(certFileName, buf.Bytes(), 0644); err != nil {
 			return errors.Wrapf(err, "failed to save certificate '%s'", certFileName)
 		}
 		if err = newCert.SaveKey(keyFileName); err != nil {
