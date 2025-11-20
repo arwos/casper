@@ -17,6 +17,6 @@ require (
 	go.osspkg.com/routine v0.4.0 // indirect
 	go.osspkg.com/static v1.4.0 // indirect
 	go.osspkg.com/syncing v0.4.3 // indirect
-	golang.org/x/crypto v0.43.0 // indirect
-	golang.org/x/sys v0.37.0 // indirect
+	golang.org/x/crypto v0.45.0 // indirect
+	golang.org/x/sys v0.38.0 // indirect
 )
