@@ -29,17 +29,17 @@ func GenerateCA() console.CommandGetter {
 			f.StringVar("icu", "", "Issuing Certificate URL")
 			f.StringVar("crl", "", "CRL Distribution Points")
 			f.StringVar("alg", "ecdsa256", "Signature Algorithm")
-			f.StringVar("email", "", "Casper PKI Email Address")
 			f.IntVar("deadline", 10*365, "Validity period (in days)")
 			f.StringVar("output", fs.CurrentDir(), "Path for save certs")
 			f.StringVar("filename", "cert", "Filename for save certs")
 			f.StringVar("ca-cert", "", "Path for CA certificate for signing")
 			f.StringVar("ca-key", "", "Path for CA key for signing")
+			f.Bool("no-auto-permission", "Turn off setup auto permission")
 		})
 		setter.ExecFunc(func(_ []string,
-			_cn, _org, _country, _ocsp, _cps, _icu, _crl, _alg, _email string, _deadline int64,
+			_cn, _org, _country, _ocsp, _cps, _icu, _crl, _alg string, _deadline int64,
 			_output, _filename string,
-			_caCertPath, _caKeyPath string,
+			_caCertPath, _caKeyPath string, _noAutoPermission bool,
 		) {
 			console.FatalIfErr(os.MkdirAll(_output, 0600), "Could not create output directory")
 
@@ -60,7 +60,6 @@ func GenerateCA() console.CommandGetter {
 			cfg.IssuingCertificateURLs = append(cfg.IssuingCertificateURLs, _icu)
 			cfg.CRLDistributionPointURLs = append(cfg.CRLDistributionPointURLs, _crl)
 			cfg.CertificatePoliciesURLs = append(cfg.CertificatePoliciesURLs, _cps)
-			cfg.EmailAddress = append(cfg.EmailAddress, _email)
 
 			rootCA := pki.Certificate{}
 			if _caCertPath != "" && _caKeyPath != "" {
@@ -76,7 +75,7 @@ func GenerateCA() console.CommandGetter {
 				cert *pki.Certificate
 			)
 			if !rootCA.IsValidPair() {
-				cert, err = pki.NewCA(cfg, validityPeriod, time.Now().Unix(), true)
+				cert, err = pki.NewCA(cfg, validityPeriod, time.Now().Unix(), 1)
 			} else {
 				cert, err = pki.NewIntermediateCA(cfg, rootCA, validityPeriod, time.Now().Unix())
 			}
@@ -90,7 +89,9 @@ func GenerateCA() console.CommandGetter {
 				cert.SaveKey(fmt.Sprintf("%s/%s.key", _output, certName)),
 				"failed save CA private key")
 
-			console.FatalIfErr(setLinuxAccess(_output, certName), "failed set linux access")
+			if !_noAutoPermission {
+				console.FatalIfErr(setLinuxAccess(_output, certName), "failed set linux access")
+			}
 		})
 	})
 }

@@ -117,8 +117,29 @@ func easyjsonCb6870ccDecodeGoArwosOrgCasperClient1(in *jlexer.Lexer, out *Renewa
 		case "ca":
 			if in.IsNull() {
 				in.Skip()
+				out.CA = nil
 			} else {
-				out.CA = string(in.String())
+				in.Delim('[')
+				if out.CA == nil {
+					if !in.IsDelim(']') {
+						out.CA = make([]string, 0, 4)
+					} else {
+						out.CA = []string{}
+					}
+				} else {
+					out.CA = (out.CA)[:0]
+				}
+				for !in.IsDelim(']') {
+					var v1 string
+					if in.IsNull() {
+						in.Skip()
+					} else {
+						v1 = string(in.String())
+					}
+					out.CA = append(out.CA, v1)
+					in.WantComma()
+				}
+				in.Delim(']')
 			}
 		case "cert":
 			if in.IsNull() {
@@ -145,10 +166,19 @@ func easyjsonCb6870ccEncodeGoArwosOrgCasperClient1(out *jwriter.Writer, in Renew
 		out.RawString(prefix[1:])
 		out.String(string(in.Status))
 	}
-	if in.CA != "" {
+	if len(in.CA) != 0 {
 		const prefix string = ",\"ca\":"
 		out.RawString(prefix)
-		out.String(string(in.CA))
+		{
+			out.RawByte('[')
+			for v2, v3 := range in.CA {
+				if v2 > 0 {
+					out.RawByte(',')
+				}
+				out.String(string(v3))
+			}
+			out.RawByte(']')
+		}
 	}
 	if in.Cert != "" {
 		const prefix string = ",\"cert\":"

@@ -16,7 +16,7 @@ import (
 	"go.osspkg.com/encrypt/pki"
 	"go.osspkg.com/goppy/v2/web"
 	"go.osspkg.com/logx"
-	"go.osspkg.com/routine"
+	"go.osspkg.com/routine/tick"
 	"go.osspkg.com/syncing"
 
 	"go.arwos.org/casper/internal/entity"
@@ -30,16 +30,16 @@ var crlCache = syncing.NewMap[string, []byte](10)
 
 func (v *API) addCrlHandlers() {
 	for _, cert := range v.certStore.List() {
-		issuer := cert.CA.Crt.Issuer.String()
+		issuer := cert.Issuer.Crt.Issuer.String()
 
-		for _, addr := range cert.CA.Crt.CRLDistributionPoints {
+		for _, addr := range cert.Issuer.Crt.CRLDistributionPoints {
 			uri, err := url.ParseRequestURI(addr)
 			if err != nil {
 				logx.Error("Failed to parse crl server URI", "issuer", issuer, "url", addr, "err", err)
 				continue
 			}
 
-			keyHashB, err := cert.CA.IssuerKeyHash(entity.Hash)
+			keyHashB, err := cert.Issuer.IssuerKeyHash(entity.Hash)
 			if err != nil {
 				logx.Error("Failed to get issuer key hash", "issuer", issuer, "err", err)
 				continue
@@ -71,65 +71,58 @@ func (v *API) addCrlHandlers() {
 	}
 }
 
-func (v *API) autoCleanCrlTicker(ctx context.Context) {
-	tik := routine.Ticker{
-		Interval: 6 * time.Hour,
+func (v *API) tickerConfigCleanCrl() tick.Config {
+	return tick.Config{
+		Name:     "delete expired certs",
 		OnStart:  true,
-		Calls: []routine.TickFunc{
-			func(ctx context.Context, t time.Time) {
-				if err := v.entityRepo.DeleteCertExpiredByValidUntil(ctx); err != nil {
-					logx.Error("Failed to delete expired certs", "err", err)
-				}
-			},
+		Interval: 6 * time.Hour,
+		Func: func(ctx context.Context, _ time.Time) error {
+			return v.entityRepo.DeleteCertExpiredByValidUntil(ctx)
 		},
 	}
-
-	go tik.Run(ctx)
 }
 
-func (v *API) updateCrlTicker(ctx context.Context) {
-	tik := routine.Ticker{
-		Interval: updateCrlIntervalSec * time.Second,
+func (v *API) tickerConfigBuildCrl() tick.Config {
+	return tick.Config{
+		Name:     "build revoked certs list",
 		OnStart:  true,
-		Calls: []routine.TickFunc{
-			func(ctx context.Context, t time.Time) {
+		Interval: updateCrlIntervalSec * time.Second,
+		Func: func(ctx context.Context, t time.Time) error {
+			number := t.UTC().Unix()
 
-				number := time.Now().UTC().Unix()
+			for _, cert := range v.certStore.List() {
+				number++
 
-				for _, cert := range v.certStore.List() {
-					number++
+				issuer := cert.Issuer.Crt.Issuer.String()
+				logx.Info("Updating CRL", "status", "start", "issuer", issuer)
 
-					issuer := cert.CA.Crt.Issuer.String()
-					logx.Info("Updating CRL", "status", "start", "issuer", issuer)
-
-					keyHashB, err := cert.CA.IssuerKeyHash(entity.Hash)
-					if err != nil {
-						logx.Error("Failed to get issuer key hash", "issuer", issuer, "err", err)
-						continue
-					}
-
-					keyHash := hex.EncodeToString(keyHashB)
-
-					result, err := v.entityRepo.SelectCertRevoked(ctx, keyHash)
-					if err != nil {
-						logx.Error("Failed to get revoked certs", "issuer", issuer, "err", err)
-						continue
-					}
-
-					nextUpdate := updateCrlIntervalSec*time.Second + 10*time.Minute
-					b, err := pki.NewCRL(*cert.CA, number, nextUpdate, result)
-					if err != nil {
-						logx.Error("Failed to build crl", "issuer", issuer, "err", err)
-						continue
-					}
-
-					crlCache.Set(keyHash, b)
-
-					logx.Info("Updating CRL", "status", "done", "issuer", issuer)
+				keyHashB, err := cert.Issuer.IssuerKeyHash(entity.Hash)
+				if err != nil {
+					logx.Error("Failed to get issuer key hash", "issuer", issuer, "err", err)
+					continue
 				}
-			},
+
+				keyHash := hex.EncodeToString(keyHashB)
+
+				result, err := v.entityRepo.SelectCertRevoked(ctx, keyHash)
+				if err != nil {
+					logx.Error("Failed to get revoked certs", "issuer", issuer, "err", err)
+					continue
+				}
+
+				nextUpdate := updateCrlIntervalSec*time.Second + 10*time.Minute
+				b, err := pki.NewCRL(*cert.Issuer, number, nextUpdate, result)
+				if err != nil {
+					logx.Error("Failed to build crl", "issuer", issuer, "err", err)
+					continue
+				}
+
+				crlCache.Set(keyHash, b)
+
+				logx.Info("Updating CRL", "status", "done", "issuer", issuer)
+			}
+
+			return nil
 		},
 	}
-
-	go tik.Run(ctx)
 }

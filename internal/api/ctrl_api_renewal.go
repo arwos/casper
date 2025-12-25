@@ -45,7 +45,7 @@ var (
 
 func (v *API) addApiHandlers() {
 	v.apiRoute.Use(
-		web.ThrottlingMiddleware(100),
+		web.ThrottlingMiddleware(300),
 		v.authzValidate(),
 	)
 	v.apiRoute.Post(client.PathRenewalV1, v.RenewCertV1)
@@ -178,8 +178,13 @@ func (v *API) createAndSignCertificate(
 	}
 
 	newCert, err := pki.SignCSR(
-		pki.Config{IssuingCertificateURLs: ca.ICUs},
-		*ca.CA,
+		pki.Config{
+			IssuingCertificateURLs:   ca.ICUs,
+			CertificatePoliciesURLs:  ca.CPSs,
+			CRLDistributionPointURLs: ca.CRLs,
+			OCSPServerURLs:           ca.OCSPs,
+		},
+		*ca.Issuer,
 		*csr,
 		time.Duration(ca.Days)*time.Hour*24,
 		model.SerialNumber,
@@ -199,13 +204,13 @@ func (v *API) createAndSignCertificate(
 	}
 	model.FingerPrint = hex.EncodeToString(fp)
 
-	ikh, err := ca.CA.IssuerKeyHash(entity.Hash)
+	ikh, err := ca.Issuer.IssuerKeyHash(entity.Hash)
 	if err != nil {
 		return nil, fmt.Errorf("failed to calculate issuer key hash: %w", err)
 	}
 	model.IssuerKeyHash = hex.EncodeToString(ikh)
 
-	inh, err := ca.CA.IssuerNameHash(entity.Hash)
+	inh, err := ca.Issuer.IssuerNameHash(entity.Hash)
 	if err != nil {
 		return nil, fmt.Errorf("failed to calculate issuer name hash: %w", err)
 	}
@@ -319,13 +324,32 @@ func (v *API) RenewCertV1(wc web.Ctx) {
 		return
 	}
 
-	caPem, err1 := pki.MarshalCrtPEM(*ca.CA.Crt)
-	crtPem, err2 := pki.MarshalCrtPEM(*newCert)
-	if err1 != nil || err2 != nil {
-		wc.ErrorJSON(http.StatusInternalServerError, errors.Wrap(err1, err2))
+	pem, err := pki.MarshalCrtPEM(*ca.Issuer.Crt)
+	if err != nil {
+		wc.ErrorJSON(http.StatusInternalServerError, err)
 		return
 	}
-	resp.CA = string(caPem)
+	resp.CA = append(resp.CA, string(pem))
+
+	ski := ca.Issuer.Crt.SubjectKeyId
+	for {
+		caChain, has := ca.GetBySubjectKeyId(ski)
+		if !has {
+			break
+		}
+		pem, err = pki.MarshalCrtPEM(*caChain)
+		if err != nil {
+			wc.ErrorJSON(http.StatusInternalServerError, err)
+			return
+		}
+		resp.CA = append(resp.CA, string(pem))
+	}
+
+	crtPem, crtErr := pki.MarshalCrtPEM(*newCert)
+	if crtErr != nil {
+		wc.ErrorJSON(http.StatusInternalServerError, crtErr)
+		return
+	}
 	resp.Cert = string(crtPem)
 
 	wc.JSON(http.StatusOK, &resp)

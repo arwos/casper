@@ -10,5 +10,5 @@ package entity
 import "go.osspkg.com/goppy/v2/plugins"
 
 var Plugin = plugins.Kind{
-	Inject: NewRepo,
+	Inject: newRepo,
 }

@@ -31,7 +31,7 @@ const (
 //easyjson:json
 type RenewalModel struct {
 	Status RenewalStatus `json:"status"`
-	CA     string        `json:"ca,omitempty"`
+	CA     []string      `json:"ca,omitempty"`
 	Cert   string        `json:"cert,omitempty"`
 }
 

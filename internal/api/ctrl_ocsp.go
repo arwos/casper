@@ -22,13 +22,13 @@ import (
 
 func (v *API) addOCSPHandlers() {
 	for _, cert := range v.certStore.List() {
-		issuer := cert.CA.Crt.Issuer.String()
+		issuer := cert.Issuer.Crt.Issuer.String()
 
 		srv := &pki.OCSPServer{
-			CA: *cert.CA,
+			CA: *cert.Issuer,
 			Resolver: &ocspStatusResolve{
 				repo:   v.entityRepo,
-				cert:   *cert.CA,
+				cert:   *cert.Issuer,
 				issuer: issuer,
 			},
 			UpdateInterval: 59 * time.Minute,
@@ -37,7 +37,7 @@ func (v *API) addOCSPHandlers() {
 			},
 		}
 
-		for _, addr := range cert.CA.Crt.OCSPServer {
+		for _, addr := range cert.Issuer.Crt.OCSPServer {
 			uri, err := url.ParseRequestURI(addr)
 			if err != nil {
 				logx.Error("Failed to parse OCSP server URI", "issuer", issuer, "url", addr, "err", err)

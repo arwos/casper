@@ -35,11 +35,9 @@ run_client_ca:
 		--country='RU' \
 		--deadline=7300 \
 		--alg=ecdsa512 \
-		--ocsp='http://pki.demo.local/root/root-l0' \
 		--cps='http://pki.demo.local/docs/cps.pdf' \
-		--crl='http://pki.demo.local/crl/root-l0.crl' \
-		--icu='http://pki.demo.local/icu/root-l0.crt' \
-		--email='pki@demo.local' \
+		--no-auto-permission \
+		--filename='dev_root_ca_l0' \
 		--output=./build
 
 	go run -race cmd/casper-cli/main.go ca \
@@ -49,11 +47,12 @@ run_client_ca:
 		--ca-cert=./build/dev_root_ca_l0.crt \
 		--ca-key=./build/dev_root_ca_l0.key \
 		--alg=ecdsa512 \
-		--ocsp='http://pki.demo.local/root/root-l1' \
+		--ocsp='http://pki.demo.local/root/root-l0' \
 		--cps='http://pki.demo.local/docs/cps.pdf' \
-		--crl='http://pki.demo.local/crl/root-l1.crl' \
+		--crl='http://pki.demo.local/crl/root-l0.crl' \
 		--icu='http://pki.demo.local/icu/root-l0.crt' \
-		--email='pki@demo.local' \
+		--no-auto-permission \
+		--filename='dev_web_ca_l1' \
 		--output=./build
 
 run_client_renewal:
@@ -63,6 +62,12 @@ run_client_renewal:
 		--auth-key='Ae8fL1pAB+83qaob3cQkX/bGHxDycUjW' \
 		--domains='a.demo.com' \
 		--alg=ecdsa256 \
+		--ocsp='http://pki.demo.local/root/root-l1' \
+		--cps='http://pki.demo.local/docs/cps.pdf' \
+		--crl='http://pki.demo.local/crl/root-l1.crl' \
+		--icu='http://pki.demo.local/icu/root-l1.crt' \
+		--no-auto-permission \
+		--filename='a_demo_com' \
 		--force \
 		--output=./build
 
@@ -79,3 +84,6 @@ run_server:
 
 deb:
 	deb-builder build --base-dir=./build --tmp-dir=/tmp/deb-build-casper --no-revision
+
+install_cli_local: build
+	cp build/casper-cli_amd64 ~/.local/bin/casper-cli

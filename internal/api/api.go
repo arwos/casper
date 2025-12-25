@@ -10,6 +10,8 @@ import (
 	"fmt"
 
 	"go.osspkg.com/goppy/v2/web"
+	"go.osspkg.com/logx"
+	"go.osspkg.com/routine/tick"
 
 	"go.arwos.org/casper/internal/entity"
 	"go.arwos.org/casper/internal/pkgs/certs"
@@ -41,12 +43,22 @@ func NewAPI(sp web.ServerPool, r *entity.Repo, cs *certs.Store) (*API, error) {
 }
 
 func (v *API) Up(ctx context.Context) error {
-	v.addOCSPHandlers()
-	v.addRootCrtHandlers()
-	v.addCrlHandlers()
-	v.updateCrlTicker(ctx)
-	v.autoCleanCrlTicker(ctx)
 	v.addApiHandlers()
+	v.addCrlHandlers()
+	v.addIcuHandlers()
+	v.addOCSPHandlers()
+
+	tik := tick.Ticker{
+		OnError: func(name string, err error) {
+			logx.Error(name, "err", err)
+		},
+		Calls: []tick.Config{
+			v.tickerConfigCleanCrl(),
+			v.tickerConfigBuildCrl(),
+		},
+	}
+
+	go tik.Run(ctx)
 
 	return nil
 }

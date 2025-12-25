@@ -14,7 +14,7 @@ type Repo struct {
 	rtag, wtag string
 }
 
-func NewRepo(orm orm.ORM) *Repo {
+func newRepo(orm orm.ORM) *Repo {
 	return &Repo{
 		orm:  orm,
 		rtag: "slave",

@@ -7,83 +7,101 @@ package certs
 
 import (
 	"crypto/x509"
+	"encoding/hex"
 	"fmt"
-	"time"
 
 	"go.osspkg.com/encrypt/pki"
-	"go.osspkg.com/ioutils/cache"
-	"go.osspkg.com/syncing"
-	"go.osspkg.com/xc"
 )
 
 type Certificate struct {
-	Root *x509.Certificate
-	CA   *pki.Certificate
-	Days int
-	ICUs []string
-	ttl  int64
+	Chain  map[string]*x509.Certificate
+	Issuer *pki.Certificate
+	Days   int
+	ICUs   []string
+	OCSPs  []string
+	CRLs   []string
+	CPSs   []string
 }
 
-func (i *Certificate) Timestamp() int64 {
-	return i.ttl
+func (v *Certificate) GetBySubjectKeyId(ski []byte) (*x509.Certificate, bool) {
+	c, ok := v.Chain[hex.EncodeToString(ski)]
+	if !ok {
+		return nil, false
+	}
+	return c, true
 }
 
 type Store struct {
-	cache cache.Cache[string, *Certificate]
-	list  syncing.Slice[*Certificate]
+	domains map[string]*Certificate
+	list    []*Certificate
 }
 
-func NewStore(ctx xc.Context, c *ConfigGroup) (*Store, error) {
+func NewStore(c *ConfigGroup) (*Store, error) {
 	obj := &Store{
-		cache: cache.New[string, *Certificate](
-			cache.OptTimeClean[string, *Certificate](ctx.Context(), 15*time.Minute),
-		),
+		domains: make(map[string]*Certificate),
+		list:    make([]*Certificate, 0, len(c.Certs)),
 	}
 
 	for _, conf := range c.Certs {
-		ca := &pki.Certificate{}
-		if err := ca.LoadCert(conf.FileCACert); err != nil {
-			return nil, fmt.Errorf("decode cert %q: %w", conf.FileCACert, err)
-		}
-		if err := ca.LoadKey(conf.FileCAKey); err != nil {
-			return nil, fmt.Errorf("decode key %q: %w", conf.FileCAKey, err)
+
+		cert := &Certificate{
+			Chain:  make(map[string]*x509.Certificate),
+			Issuer: &pki.Certificate{},
+			Days:   conf.DefaultExpireDays,
+			ICUs:   conf.IssuingCertificateURLs,
+			OCSPs:  conf.OCSPServerURLs,
+			CRLs:   conf.CRLDistributionPointURLs,
+			CPSs:   conf.CertificatePoliciesURLs,
 		}
 
-		if !ca.IsCA() {
-			return nil, fmt.Errorf("file %v is not a CA", []string{conf.FileCACert, conf.FileCAKey})
-		}
-		if !ca.IsValidPair() {
-			return nil, fmt.Errorf("file %v is not a valid pair", []string{conf.FileCACert, conf.FileCAKey})
-		}
-
-		rootCA := &pki.Certificate{}
-		if err := rootCA.LoadCert(conf.FileRootCert); err != nil {
-			return nil, fmt.Errorf("decode root cert %q: %w", conf.FileRootCert, err)
-		}
-
-		if !rootCA.IsCA() {
-			return nil, fmt.Errorf("file %v is not a CA", []string{conf.FileRootCert})
+		for _, path := range conf.RootCaChain {
+			ca := &pki.Certificate{}
+			if err := ca.LoadCert(path); err != nil {
+				return nil, fmt.Errorf("decode root cert %q: %w", path, err)
+			}
+			if !ca.IsCA() {
+				return nil, fmt.Errorf("file %q is not a CA", path)
+			}
+			cert.Chain[hex.EncodeToString(ca.Crt.SubjectKeyId)] = ca.Crt
 		}
 
-		storeItem := &Certificate{
-			Root: rootCA.Crt,
-			CA:   ca,
-			Days: conf.DefaultExpireDays,
-			ICUs: conf.IssuingCertificateURLs,
-			ttl:  ca.Crt.NotAfter.Unix(),
+		if err := cert.Issuer.LoadCert(conf.IssuingCACert); err != nil {
+			return nil, fmt.Errorf("decode cert %q: %w", conf.IssuingCACert, err)
+		}
+		if err := cert.Issuer.LoadKey(conf.IssuingCAKey); err != nil {
+			return nil, fmt.Errorf("decode key %q: %w", conf.IssuingCAKey, err)
 		}
 
-		obj.list.Append(storeItem)
+		if !cert.Issuer.IsCA() {
+			return nil, fmt.Errorf("file %v is not a CA", []string{conf.IssuingCACert, conf.IssuingCAKey})
+		}
+		if !cert.Issuer.IsValidPair() {
+			return nil, fmt.Errorf("file %v is not a valid pair", []string{conf.IssuingCACert, conf.IssuingCAKey})
+		}
+
+		obj.list = append(obj.list, cert)
 		for _, domain := range conf.Domains {
-			obj.cache.Set(domain, storeItem)
+			obj.domains[domain] = cert
 		}
 	}
 
 	return obj, nil
 }
 
-func (s *Store) Get(name string) (*Certificate, bool) {
-	v, ok := s.cache.Get(name)
+func (s *Store) GetBySubjectKeyId(domain string, ski []byte) (*x509.Certificate, bool) {
+	v, ok := s.domains[domain]
+	if !ok {
+		return nil, false
+	}
+	c, ok := v.Chain[hex.EncodeToString(ski)]
+	if !ok {
+		return nil, false
+	}
+	return c, true
+}
+
+func (s *Store) Get(domain string) (*Certificate, bool) {
+	v, ok := s.domains[domain]
 	if !ok {
 		return nil, false
 	}
@@ -91,11 +109,7 @@ func (s *Store) Get(name string) (*Certificate, bool) {
 }
 
 func (s *Store) List() []*Certificate {
-	result := make([]*Certificate, 0, s.list.Size())
-
-	for cert := range s.list.Yield() {
-		result = append(result, cert)
-	}
-
+	result := make([]*Certificate, 0, len(s.list))
+	result = append(result, s.list...)
 	return result
 }

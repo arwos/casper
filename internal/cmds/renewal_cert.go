@@ -21,7 +21,7 @@ import (
 	web "go.osspkg.com/goppy/v2/web/client"
 	"go.osspkg.com/ioutils/codec"
 	"go.osspkg.com/ioutils/fs"
-	"go.osspkg.com/routine"
+	"go.osspkg.com/routine/tick"
 
 	"go.arwos.org/casper/client"
 )
@@ -31,6 +31,7 @@ func RenewalCert() console.CommandGetter {
 		setter.Setup("renewal", "renewal certificate")
 		setter.Flag(func(f console.FlagsSetter) {
 			f.Bool("force", "Force renewal certificate")
+			f.Bool("no-auto-permission", "Turn off setup auto permission")
 			f.String("domains", "Domains for renewal certificate")
 			f.StringVar("address", "", "Casper server address")
 			f.StringVar("auth-id", "", "Authentication ID")
@@ -40,7 +41,7 @@ func RenewalCert() console.CommandGetter {
 			f.StringVar("filename", "cert", "Filename for save certs")
 		})
 		setter.ExecFunc(func(_ []string,
-			_force bool, _domains string, _address, _authId, _authKey, _alg, _output, _filename string,
+			_force, _noAutoPermission bool, _domains, _address, _authId, _authKey, _alg, _output, _filename string,
 		) {
 
 			ctx, cancel := context.WithCancel(context.Background())
@@ -49,7 +50,7 @@ func RenewalCert() console.CommandGetter {
 			go events.OnStopSignal(cancel)
 
 			errWrap(
-				renewalCertificate(ctx, _force, _domains, _address, _authId, _authKey, _alg, _output, _filename),
+				renewalCertificate(ctx, _force, _noAutoPermission, _domains, _address, _authId, _authKey, _alg, _output, _filename),
 				_domains,
 			)
 		})
@@ -87,20 +88,24 @@ func RenewalCertAuto() console.CommandGetter {
 
 			go events.OnStopSignal(cancel)
 
-			tik := &routine.Ticker{
-				Interval: cfg.Interval,
-				OnStart:  true,
-				Calls: []routine.TickFunc{
-					func(ctx context.Context, _ time.Time) {
-						for _, request := range cfg.Requests {
-							domains := strings.Join(request.Domains, ",")
-							errWrap(
-								renewalCertificate(ctx, false, domains,
-									cfg.ApiHost, cfg.AuthID, cfg.AuthToken,
-									cfg.Algorithm, cfg.StorePath, request.Filename),
-								domains,
-							)
-						}
+			tik := tick.Ticker{
+				Calls: []tick.Config{
+					{
+						Name:     "auto renewal",
+						OnStart:  true,
+						Interval: cfg.Interval,
+						Func: func(ctx context.Context, _ time.Time) error {
+							for _, request := range cfg.Requests {
+								domains := strings.Join(request.Domains, ",")
+								errWrap(
+									renewalCertificate(ctx, false, false, domains,
+										cfg.ApiHost, cfg.AuthID, cfg.AuthToken,
+										cfg.Algorithm, cfg.StorePath, request.Filename),
+									domains,
+								)
+							}
+							return nil
+						},
 					},
 				},
 			}
@@ -110,7 +115,8 @@ func RenewalCertAuto() console.CommandGetter {
 }
 
 func renewalCertificate(
-	ctx context.Context, _force bool, _domains string, _address, _authId, _authKey, _alg, _output, _filename string,
+	ctx context.Context, _force, _noAutoPermission bool,
+	_domains, _address, _authId, _authKey, _alg, _output, _filename string,
 ) error {
 	alg, ok := _algorithms[_alg]
 	if !ok {
@@ -155,14 +161,16 @@ func renewalCertificate(
 	case client.RenewalStatusIssued:
 	}
 
-	caCert := pki.Certificate{}
-	newCert := pki.Certificate{Key: csr.Key}
-
-	caCert.Crt, err = pki.UnmarshalCrtPEM([]byte(out.CA))
-	if err != nil {
-		return errors.Wrapf(err, "failed to decode CA PEM")
+	caCerts := make([]pki.Certificate, 0, len(out.Cert))
+	for _, item := range out.CA {
+		crt, err := pki.UnmarshalCrtPEM([]byte(item))
+		if err != nil {
+			return errors.Wrapf(err, "failed to decode CA PEM")
+		}
+		caCerts = append(caCerts, pki.Certificate{Crt: crt})
 	}
 
+	newCert := pki.Certificate{Key: csr.Key}
 	newCert.Crt, err = pki.UnmarshalCrtPEM([]byte(out.Cert))
 	if err != nil {
 		return errors.Wrapf(err, "failed to decode Cert PEM")
@@ -182,11 +190,13 @@ func renewalCertificate(
 		}
 		buf.Write(b)
 
-		b, err = pki.MarshalCrtPEM(*caCert.Crt)
-		if err != nil {
-			return errors.Wrapf(err, "failed to encode CA Cert PEM")
+		for _, crt := range caCerts {
+			b, err = pki.MarshalCrtPEM(*crt.Crt)
+			if err != nil {
+				return errors.Wrapf(err, "failed to encode CA Cert PEM")
+			}
+			buf.Write(b)
 		}
-		buf.Write(b)
 
 		if err = os.WriteFile(certFileName, buf.Bytes(), 0644); err != nil {
 			return errors.Wrapf(err, "failed to save certificate '%s'", certFileName)
@@ -194,8 +204,10 @@ func renewalCertificate(
 		if err = newCert.SaveKey(keyFileName); err != nil {
 			return errors.Wrapf(err, "failed to save key '%s'", keyFileName)
 		}
-		if err = setLinuxAccess(_output, certName); err != nil {
-			return err
+		if !_noAutoPermission {
+			if err = setLinuxAccess(_output, certName); err != nil {
+				return err
+			}
 		}
 	}
 
