@@ -31,14 +31,19 @@ db_migrate:
       dir: /var/lib/casper/migrations
 
 certs:
-    - ca_cert: "/var/lib/casper/intermediate.crt"
-      ca_key: "/var/lib/casper/intermediate.key"
-      root_cert: "/var/lib/casper/root.crt"
-      domains:
-        - domain1
-        - domain2
-      default_expire_days: 90
-      issuing_certificate_urls:
-        - http://pki.domain/icu/root-l1.crt
-
-
+  - root_ca_chain:
+      - /var/lib/casper/root.crt
+    issuing_ca_cert: /var/lib/casper/intermediate.crt
+    issuing_ca_key: /var/lib/casper/intermediate.key
+    domains:
+      - localhost
+      - example.com
+    default_expire_days: 90
+    issuing_certificate_urls:
+      - http://pki.domain/icu/ca-l2.crt
+    ocsp_server_urls:
+      - http://pki.domain/ocsp/ca-l2
+    crl_distribution_point_urls:
+      - http://pki.domain/crl/ca-l2.crl
+    certificate_policies_urls:
+      - http://pki.domain/cps/ca-l2.html
