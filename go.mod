@@ -7,7 +7,7 @@ require (
 	go.arwos.org/casper/client v0.0.0
 	go.osspkg.com/console v0.3.3
 	go.osspkg.com/do v0.2.1
-	go.osspkg.com/encrypt v0.5.3-0.20251230014658-fecfcf413fee
+	go.osspkg.com/encrypt v0.5.3-0.20251230033819-8c5ee1a284f1
 	go.osspkg.com/errors v0.4.0
 	go.osspkg.com/events v0.3.0
 	go.osspkg.com/goppy/v2 v2.4.9
