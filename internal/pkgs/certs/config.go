@@ -10,9 +10,9 @@ type ConfigGroup struct {
 }
 
 type Config struct {
-	RootCaChain              []string `yaml:"root_ca_chain"`
-	IssuingCACert            string   `yaml:"issuing_ca_cert"`
-	IssuingCAKey             string   `yaml:"issuing_ca_key"`
+	CACert                   string   `yaml:"cert"`
+	CAKey                    string   `yaml:"key"`
+	Chain                    []string `yaml:"chain"`
 	Domains                  []string `yaml:"domains"`
 	DefaultExpireDays        int      `yaml:"default_expire_days"`
 	IssuingCertificateURLs   []string `yaml:"issuing_certificate_urls"`
@@ -28,12 +28,12 @@ func (c *ConfigGroup) Default() {
 
 	c.Certs = append(c.Certs,
 		Config{
-			RootCaChain: []string{
+			Chain: []string{
 				"/path/to/root-ca-l1.crt",
 				"/path/to/root-ca-l0.crt",
 			},
-			IssuingCACert:            "/path/to/issuing-ca-l2.crt",
-			IssuingCAKey:             "/path/to/issuing-ca-l2.key",
+			CACert:                   "/path/to/issuing-ca-l2.crt",
+			CAKey:                    "/path/to/issuing-ca-l2.key",
 			Domains:                  []string{"localhost", "example.com"},
 			DefaultExpireDays:        30,
 			IssuingCertificateURLs:   []string{"http://pki.domain/icu/ca-l2.crt"},

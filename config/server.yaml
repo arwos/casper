@@ -31,10 +31,17 @@ db_migrate:
       dir: /var/lib/casper/migrations
 
 certs:
-  - root_ca_chain:
+  - cert: /var/lib/casper/root.crt
+    key: /var/lib/casper/root.key
+    issuing_certificate_urls:
+      - http://pki.domain/icu/ca-l1.crt
+    crl_distribution_point_urls:
+      - http://pki.domain/crl/ca-l1.crl
+
+  - cert: /var/lib/casper/intermediate.crt
+    key: /var/lib/casper/intermediate.key
+    chain:
       - /var/lib/casper/root.crt
-    issuing_ca_cert: /var/lib/casper/intermediate.crt
-    issuing_ca_key: /var/lib/casper/intermediate.key
     domains:
       - localhost
       - example.com

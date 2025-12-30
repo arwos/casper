@@ -54,7 +54,7 @@ func NewStore(c *ConfigGroup) (*Store, error) {
 			CPSs:   conf.CertificatePoliciesURLs,
 		}
 
-		for _, path := range conf.RootCaChain {
+		for _, path := range conf.Chain {
 			ca := &pki.Certificate{}
 			if err := ca.LoadCert(path); err != nil {
 				return nil, fmt.Errorf("decode root cert %q: %w", path, err)
@@ -65,18 +65,18 @@ func NewStore(c *ConfigGroup) (*Store, error) {
 			cert.Chain[hex.EncodeToString(ca.Crt.SubjectKeyId)] = ca.Crt
 		}
 
-		if err := cert.Issuer.LoadCert(conf.IssuingCACert); err != nil {
-			return nil, fmt.Errorf("decode cert %q: %w", conf.IssuingCACert, err)
+		if err := cert.Issuer.LoadCert(conf.CACert); err != nil {
+			return nil, fmt.Errorf("decode cert %q: %w", conf.CACert, err)
 		}
-		if err := cert.Issuer.LoadKey(conf.IssuingCAKey); err != nil {
-			return nil, fmt.Errorf("decode key %q: %w", conf.IssuingCAKey, err)
+		if err := cert.Issuer.LoadKey(conf.CAKey); err != nil {
+			return nil, fmt.Errorf("decode key %q: %w", conf.CAKey, err)
 		}
 
 		if !cert.Issuer.IsCA() {
-			return nil, fmt.Errorf("file %v is not a CA", []string{conf.IssuingCACert, conf.IssuingCAKey})
+			return nil, fmt.Errorf("file %v is not a CA", []string{conf.CACert, conf.CAKey})
 		}
 		if !cert.Issuer.IsValidPair() {
-			return nil, fmt.Errorf("file %v is not a valid pair", []string{conf.IssuingCACert, conf.IssuingCAKey})
+			return nil, fmt.Errorf("file %v is not a valid pair", []string{conf.CACert, conf.CAKey})
 		}
 
 		obj.list = append(obj.list, cert)
