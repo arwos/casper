@@ -7,30 +7,30 @@ exit 1
 
 #------------------------------------------------------------------------------------------
 
-ORG="Dev Team"
-ROOT="Dev Root CA L0"
-INTER="Dev Web Intermediate L1"
-HOST="127.0.0.3:20000"
+ORG="Example Org"
+ROOT="Example Root A0"
+INTER="Example Intermediate B0"
+HOST="pki.example.com"
 
 casper-cli ca \
 		--cn="${ROOT}" \
 		--org="${ORG}" \
-		--deadline=3650 \
+		--deadline=1825 \
 		--alg=ecdsa256 \
-		--cps="http://${HOST}/cps/root-l0.html" \
 		--filename=root \
 		--output=.
 
 casper-cli ca \
 		--cn="${INTER}" \
 		--org="${ORG}" \
-		--deadline=1825 \
+		--deadline=730 \
 		--ca-cert=./root.crt \
 		--ca-key=./root.key \
 		--alg=ecdsa256 \
-		--icu="http://${HOST}/icu/root-l0.crt" \
-		--ocsp="http://${HOST}/ocsp/root-l0" \
-		--crl="http://${HOST}/crl/root-l0.crl" \
-		--cps="http://${HOST}/cps/root-l0.html" \
+		--icu="http://${HOST}/icu/example-root-a0.crt" \
+		--ocsp="http://${HOST}/ocsp/example-inter-b0" \
+		--crl="http://${HOST}/crl/example-inter-b0.crl" \
 		--filename=intermediate \
 		--output=.
+
+chown casper:casper *.{key,crt}
