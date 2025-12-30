@@ -6,6 +6,7 @@
 package api
 
 import (
+	"crypto/x509"
 	"net/http"
 	"net/url"
 
@@ -16,30 +17,42 @@ import (
 
 func (v *API) addIcuHandlers() {
 	for _, cert := range v.certStore.List() {
-		issuer := cert.Issuer.Crt.Issuer.String()
+		for _, addr := range cert.ICUs {
+			v.addIcuRoute(addr, cert.Issuer.Crt)
 
-		for _, addr := range cert.Issuer.Crt.IssuingCertificateURL {
-			uri, err := url.ParseRequestURI(addr)
-			if err != nil {
-				logx.Error("Failed to parse issuing server URI", "issuer", issuer, "url", addr, "err", err)
+			authCert, ok := cert.GetBySubjectKeyId(cert.Issuer.Crt.AuthorityKeyId)
+			if !ok {
 				continue
 			}
 
-			logx.Info("Adding issuing server URL", "issuer", issuer, "url", uri.Path)
-
-			v.pkiRoute.Get(uri.Path, func() func(ctx web.Ctx) {
-				der := pki.MarshalCrtDER(*cert.Issuer.Crt)
-				issuer := issuer
-
-				return func(ctx web.Ctx) {
-					ctx.Header().Set("Content-Type", "application/pkix-cert")
-					ctx.Header().Set("Cache-Control", "max-age=86400,s-maxage=14400,public,no-transform,must-revalidate")
-					ctx.Response().WriteHeader(http.StatusOK)
-					if _, err := ctx.Response().Write(der); err != nil {
-						logx.Error("Failed to write issuing certificate", "issuer", issuer, "err", err)
-					}
-				}
-			}())
+			for _, addr = range authCert.IssuingCertificateURL {
+				v.addIcuRoute(addr, authCert)
+			}
 		}
 	}
+}
+
+func (v *API) addIcuRoute(addr string, cert *x509.Certificate) {
+	issuer := cert.Issuer.String()
+
+	uri, err := url.ParseRequestURI(addr)
+	if err != nil {
+		logx.Error("Failed to parse issuing server URI", "issuer", issuer, "url", addr, "err", err)
+		return
+	}
+
+	logx.Info("Adding issuing server URL", "issuer", issuer, "url", uri.Path)
+
+	v.pkiRoute.Get(uri.Path, func() func(ctx web.Ctx) {
+		der := pki.MarshalCrtDER(*cert)
+
+		return func(ctx web.Ctx) {
+			ctx.Header().Set("Content-Type", "application/pkix-cert")
+
+			ctx.Response().WriteHeader(http.StatusOK)
+			if _, err := ctx.Response().Write(der); err != nil {
+				logx.Error("Failed to write issuing certificate", "issuer", issuer, "err", err)
+			}
+		}
+	}())
 }

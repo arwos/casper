@@ -8,7 +8,6 @@ package api
 import (
 	"context"
 	"encoding/hex"
-	"fmt"
 	"net/http"
 	"net/url"
 	"time"
@@ -32,7 +31,7 @@ func (v *API) addCrlHandlers() {
 	for _, cert := range v.certStore.List() {
 		issuer := cert.Issuer.Crt.Issuer.String()
 
-		for _, addr := range cert.Issuer.Crt.CRLDistributionPoints {
+		for _, addr := range cert.CRLs {
 			uri, err := url.ParseRequestURI(addr)
 			if err != nil {
 				logx.Error("Failed to parse crl server URI", "issuer", issuer, "url", addr, "err", err)
@@ -49,11 +48,9 @@ func (v *API) addCrlHandlers() {
 
 			v.pkiRoute.Get(uri.Path, func() func(ctx web.Ctx) {
 				keyHash := hex.EncodeToString(keyHashB)
-				cc := fmt.Sprintf("max-age=%d,s-maxage=14400,public,no-transform,must-revalidate", updateCrlIntervalSec)
 
 				return func(ctx web.Ctx) {
 					ctx.Header().Set("Content-Type", "application/pkix-crl")
-					ctx.Header().Set("Cache-Control", cc)
 
 					b, ok := crlCache.Get(keyHash)
 					if !ok {

@@ -37,7 +37,7 @@ func (v *API) addOCSPHandlers() {
 			},
 		}
 
-		for _, addr := range cert.Issuer.Crt.OCSPServer {
+		for _, addr := range cert.OCSPs {
 			uri, err := url.ParseRequestURI(addr)
 			if err != nil {
 				logx.Error("Failed to parse OCSP server URI", "issuer", issuer, "url", addr, "err", err)
