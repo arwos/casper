@@ -19,15 +19,6 @@ func (v *API) addIcuHandlers() {
 	for _, cert := range v.certStore.List() {
 		for _, addr := range cert.ICUs {
 			v.addIcuRoute(addr, cert.Issuer.Crt)
-
-			authCert, ok := cert.GetBySubjectKeyId(cert.Issuer.Crt.AuthorityKeyId)
-			if !ok {
-				continue
-			}
-
-			for _, addr = range authCert.IssuingCertificateURL {
-				v.addIcuRoute(addr, authCert)
-			}
 		}
 	}
 }
