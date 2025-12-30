@@ -28,8 +28,7 @@ casper-cli ca \
 		--ca-key=./root.key \
 		--alg=ecdsa256 \
 		--icu="http://${HOST}/icu/example-root-a0.crt" \
-		--ocsp="http://${HOST}/ocsp/example-inter-b0" \
-		--crl="http://${HOST}/crl/example-inter-b0.crl" \
+		--crl="http://${HOST}/crl/example-root-a0.crl" \
 		--filename=intermediate \
 		--output=.
 
